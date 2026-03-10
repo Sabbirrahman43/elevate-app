@@ -11,7 +11,7 @@ export const HabitGrid: React.FC = () => {
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitIcon, setNewHabitIcon] = useState('✨');
   const [newHabitCategory, setNewHabitCategory] = useState('General');
-  const [view, setView] = useState<'cards' | 'table'>('cards');
+  const [view, setView] = useState<'cards' | 'table'>('table');
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);

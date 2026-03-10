@@ -331,8 +331,12 @@ export const Settings: React.FC = () => {
               </div>
             </div>
             <div className="mt-6">
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 flex items-center">
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 flex items-center justify-between">
                 Behavior & Tags
+                <button onClick={() => updateAISettings({ behavior: aiSettings.behavior ? '' : 'Motivating, warm, uses emojis, focuses on discipline and growth.' })}
+                  className="text-[9px] px-2 py-1 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-bold uppercase tracking-widest text-gray-500">
+                  {aiSettings.behavior ? 'Clear' : 'Reset Default'}
+                </button>
               </label>
               <div className="relative">
                 <textarea
@@ -344,6 +348,7 @@ export const Settings: React.FC = () => {
                 />
                 <MessageSquare className="absolute right-4 bottom-4 text-gray-300 dark:text-gray-700" size={18} />
               </div>
+              <p className="text-[9px] text-gray-400 mt-1">This text guides your AI's personality. Clear it to use default behavior.</p>
             </div>
           </section>
 
@@ -407,6 +412,42 @@ export const Settings: React.FC = () => {
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* Themes */}
+          <section className="bg-white dark:bg-[#141414] p-6 md:p-8 rounded-3xl shadow-sm border border-black/5 dark:border-white/5 transition-colors">
+            <div className="flex items-center space-x-3 mb-6">
+              <Sparkles className="text-emerald-500" size={24} />
+              <h3 className="text-xl font-bold">Theme</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {[
+                { id: 'default', name: 'Default', accent: '#10b981', bg: '#0A0A0A', preview: 'bg-gray-900' },
+                { id: 'cyber', name: 'Cyber', accent: '#00fff5', bg: '#050a0a', preview: 'bg-cyan-950' },
+                { id: 'red', name: 'Red', accent: '#ef4444', bg: '#0a0505', preview: 'bg-red-950' },
+                { id: 'purple', name: 'Purple', accent: '#a855f7', bg: '#06040a', preview: 'bg-purple-950' },
+                { id: 'gold', name: 'Gold', accent: '#f59e0b', bg: '#0a0800', preview: 'bg-amber-950' },
+              ].map(t => {
+                const current = localStorage.getItem('elevate_theme') || 'default';
+                return (
+                  <button key={t.id} onClick={() => {
+                    localStorage.setItem('elevate_theme', t.id);
+                    document.documentElement.style.setProperty('--accent', t.accent);
+                    document.documentElement.style.setProperty('--accent-bg', t.bg);
+                    // Force re-render
+                    window.dispatchEvent(new Event('theme-change'));
+                  }}
+                    className={cn("flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all",
+                      current === t.id ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20")}>
+                    <div className={`w-full h-10 rounded-xl ${t.preview} flex items-center justify-center`}>
+                      <div className="w-4 h-4 rounded-full" style={{ background: t.accent }} />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400">{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[9px] text-gray-400 mt-3">Theme applies accent colors across the app. Full theme support coming soon.</p>
           </section>
 
           {/* Data Management */}

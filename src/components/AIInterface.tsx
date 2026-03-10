@@ -40,7 +40,7 @@ const MODELS = [
 const VOICE_LENGTHS = [
   { id: 'short', label: 'Short', desc: '~40 words', chars: 200 },
   { id: 'medium', label: 'Medium', desc: '~120 words', chars: 600 },
-  { id: 'full', label: 'Full', desc: '~240 words', chars: 1200 },
+  { id: 'full', label: 'Full', desc: 'No limit', chars: 999999 },
 ];
 
 const MODES = [
@@ -140,16 +140,20 @@ export const AIInterface: React.FC = () => {
 
   const generateSystem = () => {
     let ctx = `Name: ${userProfile?.name || 'User'}\n`;
-    if (userProfile?.about) ctx += `About: ${userProfile.about}\n`;
-    if (userProfile?.goals) ctx += `Goals: ${userProfile.goals}\n`;
-    return `You are ${aiSettings.name}, a highly intelligent ${aiSettings.persona}.
+    if (userProfile?.about) ctx += `About: ${userProfile.about.substring(0, 200)}\n`;
+    if (userProfile?.goals) ctx += `Goals: ${userProfile.goals.substring(0, 200)}\n`;
+    // Limit to avoid token bloat — keep recent 10 habits, 10 tasks, 5 memories
+    const recentHabits = habits.slice(0, 10).map(h => `${h.name}(${h.id})`).join(', ') || 'None';
+    const recentTasks = tasks.slice(-10).map(t => `${t.name}(${t.id},${t.date},done:${t.completed})`).join(', ') || 'None';
+    const recentMemory = aiMemory.slice(-5).map(m => m.content.substring(0, 100)).join(' | ') || 'None';
+    return `You are ${aiSettings.name}, a highly intelligent and emotionally aware ${aiSettings.persona}.
 Mode: ${aiSettings.mode} | Behavior: ${aiSettings.behavior}
 USER: ${ctx}
-HABITS: ${habits.map(h => `${h.name}(${h.id})`).join(', ') || 'None'}
-TASKS: ${tasks.map(t => `${t.name}(${t.id},${t.date},done:${t.completed})`).join(', ') || 'None'}
-MEMORY: ${aiMemory.map(m => m.content).join(' | ') || 'None'}
+HABITS: ${recentHabits}
+TASKS: ${recentTasks}
+MEMORY: ${recentMemory}
 Today: ${format(new Date(), 'yyyy-MM-dd')}
-Be natural, warm, human. Use clean Markdown. Stay concise. Prioritize wellbeing.`;
+Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay concise unless depth needed. Prioritize wellbeing.`;
   };
 
   const handleSend = async (overrideInput?: string, fromIndex?: number) => {
@@ -198,10 +202,13 @@ Be natural, warm, human. Use clean Markdown. Stay concise. Prioritize wellbeing.
     } catch (err: any) {
       const msg = err.message || '';
       const isQuota = msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate');
+      const localMidnight = new Date();
+      localMidnight.setHours(24, 0, 0, 0);
+      const hoursLeft = Math.round((localMidnight.getTime() - Date.now()) / 3600000);
       setMessages(prev => [...prev, {
         id: `err-${Date.now()}`, role: 'assistant',
         content: isQuota
-          ? `⚠️ **Quota limit reached.** Free tier resets daily at midnight (Pacific Time). Try switching to **Flash Lite** model in the chat header, or wait until tomorrow.`
+          ? `⚠️ **Quota limit reached.** Your free Gemini API resets at midnight your local time — about **${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''} from now**.\n\n**Quick fix:** Switch to **Flash Lite** model (fastest, lowest quota) using the model selector in the chat header.`
           : `⚠️ ${msg || 'Failed. Check your API key in Settings.'}`,
         timestamp: new Date()
       }]);
@@ -259,12 +266,23 @@ Be natural, warm, human. Use clean Markdown. Stay concise. Prioritize wellbeing.
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return;
     const isVid = f.type.startsWith('video/');
+    // Warn if file too large for localStorage (4MB safe limit)
+    if (f.size > 4 * 1024 * 1024) {
+      alert(`File is too large (${(f.size/1024/1024).toFixed(1)}MB). Please use an image under 4MB or a very short video clip. Large files cannot be saved and will disappear on navigation.`);
+      return;
+    }
     const r = new FileReader();
     r.onload = ev => {
       const url = ev.target?.result as string;
-      setBg(url); setBgType(isVid ? 'video' : 'image');
-      localStorage.setItem('elevate_ai_bg', url);
-      localStorage.setItem('elevate_ai_bg_type', isVid ? 'video' : 'image');
+      try {
+        localStorage.setItem('elevate_ai_bg', url);
+        localStorage.setItem('elevate_ai_bg_type', isVid ? 'video' : 'image');
+        setBg(url); setBgType(isVid ? 'video' : 'image');
+      } catch {
+        // localStorage full — set in memory only, warn user
+        setBg(url); setBgType(isVid ? 'video' : 'image');
+        alert('Wallpaper set for this session only — file is too large to save permanently. Use a smaller image to keep it between sessions.');
+      }
     };
     r.readAsDataURL(f);
   };

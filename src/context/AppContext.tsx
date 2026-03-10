@@ -35,7 +35,7 @@ type AppContextType = {
   signup: (email: string, password: string, name: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => void; importData: (data: any) => void; resetData: () => void;
-  getAllUsers: () => any[];
+  getAllUsers: () => Promise<any[]>;
   forceSave: () => Promise<void>;
 };
 
@@ -153,7 +153,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.location.href = '/';
   };
 
-  const getAllUsers = (): any[] => [];
+  const getAllUsers = async (): Promise<any[]> => {
+    try {
+      const { data, error } = await supabase.from('user_data').select('id, data');
+      if (error || !data) return [];
+      return data.map((row: any) => ({
+        id: row.id,
+        name: row.data?.userProfile?.name || 'Unknown',
+        email: row.data?.userProfile?.email || 'No email',
+        messageCount: row.data?.userProfile?.messageCount || 0,
+        habits: row.data?.habits?.length || 0,
+        tasks: row.data?.tasks?.length || 0,
+      }));
+    } catch { return []; }
+  };
 
   // --- Data ---
   const addHabit = (name: string, category: string, icon: string) => {

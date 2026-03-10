@@ -10,9 +10,11 @@ export const Admin: React.FC = () => {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchUsers = () => {
+  const fetchUsers = async () => {
     try {
-      setUsers(getAllUsers());
+      setLoading(true);
+      const result = await getAllUsers();
+      setUsers(result);
     } catch (err: any) {
       setError(err.message);
     } finally {
