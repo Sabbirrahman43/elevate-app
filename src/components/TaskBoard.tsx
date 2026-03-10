@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const TaskBoard: React.FC = () => {
-  const { tasks, addTask, toggleTask, deleteTask } = useAppContext();
+  const { tasks, addTask, toggleTask, deleteTask, habits } = useAppContext();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [newTaskName, setNewTaskName] = useState('');
 
@@ -98,9 +98,19 @@ export const TaskBoard: React.FC = () => {
                       task.completed ? "bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/20" : "border-gray-200 dark:border-white/20 hover:border-emerald-500")}>
                     {task.completed && <Check size={13} />}
                   </button>
-                  <span className={cn("flex-1 text-sm font-medium min-w-0", task.completed && "line-through text-gray-400 dark:text-gray-600")}>
-                    {task.name}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className={cn("text-sm font-medium", task.completed && "line-through text-gray-400 dark:text-gray-600")}>
+                      {task.name}
+                    </span>
+                    {task.habitId && (() => {
+                      const linked = habits.find(h => h.id === task.habitId);
+                      return linked ? (
+                        <span className="ml-2 text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                          {linked.icon} habit
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                   <button onClick={() => deleteTask(task.id)} className="p-1.5 text-gray-300 dark:text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
                     <Trash2 size={14} />
                   </button>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, User, ArrowRight, Loader2, Sparkles, ShieldCheck, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Logo } from './Logo';
+import { supabase } from '../context/AppContext';
 
 type LoginProps = {
   onBack?: () => void;
@@ -11,40 +12,44 @@ type LoginProps = {
 export const Login: React.FC<LoginProps> = ({ onBack }) => {
   const { login, signup, loginWithGoogle } = useAppContext();
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgot, setIsForgot] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const handleGoogleLogin = async () => {
-    try {
-      await loginWithGoogle();
-    } catch (err: any) {
-      setError(err.message || 'Google login failed');
-    }
+    try { await loginWithGoogle(); } catch (err: any) { setError(err.message || 'Google login failed'); }
   };
 
-  React.useEffect(() => {
-    setServerStatus('online');
-  }, []);
+  React.useEffect(() => { setServerStatus('online'); }, []);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      setSuccess('Password reset email sent! Check your inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reset email');
+    } finally { setLoading(false); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        await signup(email, password, name);
-      }
+      if (isLogin) { await login(email, password); }
+      else { await signup(email, password, name); }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -85,21 +90,39 @@ export const Login: React.FC<LoginProps> = ({ onBack }) => {
           className="bg-white dark:bg-[#141414] p-8 rounded-[32px] shadow-xl border border-black/5 dark:border-white/5 transition-colors"
         >
           <div className="flex p-1 bg-gray-100 dark:bg-white/5 rounded-2xl mb-8">
-            <button 
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${isLogin ? 'bg-white dark:bg-[#1A1A1A] shadow-sm text-emerald-500' : 'text-gray-400'}`}
-            >
+            <button onClick={() => { setIsLogin(true); setIsForgot(false); }}
+              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${isLogin && !isForgot ? 'bg-white dark:bg-[#1A1A1A] shadow-sm text-emerald-500' : 'text-gray-400'}`}>
               Login
             </button>
-            <button 
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${!isLogin ? 'bg-white dark:bg-[#1A1A1A] shadow-sm text-emerald-500' : 'text-gray-400'}`}
-            >
+            <button onClick={() => { setIsLogin(false); setIsForgot(false); }}
+              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${!isLogin && !isForgot ? 'bg-white dark:bg-[#1A1A1A] shadow-sm text-emerald-500' : 'text-gray-400'}`}>
               Sign Up
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Forgot Password Form */}
+          {isForgot ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 ml-1">Your Email</label>
+                <div className="relative">
+                  <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                    className="w-full h-14 pl-12 pr-4 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    placeholder="name@example.com" />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                </div>
+              </div>
+              {error && <p className="text-red-500 text-xs font-medium text-center">{error}</p>}
+              {success && <p className="text-emerald-500 text-xs font-medium text-center">{success}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full h-14 bg-emerald-500 text-white rounded-2xl font-bold uppercase tracking-widest text-xs shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2 mt-2">
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <><span>Send Reset Link</span><ArrowRight size={18} /></>}
+              </button>
+              <button type="button" onClick={() => setIsForgot(false)} className="w-full text-center text-xs text-gray-400 hover:text-emerald-500 transition-colors font-bold uppercase tracking-widest mt-2">
+                ← Back to Login
+              </button>
+            </form>
+          ) : (
             <AnimatePresence mode="wait">
               {!isLogin && (
                 <motion.div
@@ -154,13 +177,17 @@ export const Login: React.FC<LoginProps> = ({ onBack }) => {
             </div>
 
             {error && (
-              <motion.p 
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
-                className="text-red-500 text-xs font-medium text-center"
-              >
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-xs font-medium text-center">
                 {error}
               </motion.p>
+            )}
+
+            {isLogin && (
+              <div className="text-right">
+                <button type="button" onClick={() => setIsForgot(true)} className="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-emerald-500 transition-colors">
+                  Forgot password?
+                </button>
+              </div>
             )}
 
             <button
@@ -211,6 +238,7 @@ export const Login: React.FC<LoginProps> = ({ onBack }) => {
               <span>Continue with Google</span>
             </button>
           </form>
+          )} {/* end isForgot conditional */}
         </motion.div>
 
         <div className="mt-8 flex items-center justify-center space-x-6 text-gray-400">

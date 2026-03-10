@@ -138,6 +138,20 @@ export const AIInterface: React.FC = () => {
     }
   }, [latestAiId]);
 
+  // Stop voice when switching tabs
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) stopSpeaking(false);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Stop voice when new message starts loading
+  useEffect(() => {
+    if (isLoading) stopSpeaking(false);
+  }, [isLoading]);
+
   const generateSystem = () => {
     let ctx = `Name: ${userProfile?.name || 'User'}\n`;
     if (userProfile?.about) ctx += `About: ${userProfile.about.substring(0, 200)}\n`;

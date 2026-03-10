@@ -32,6 +32,19 @@ const MainLayout = () => {
   };
 
   React.useEffect(() => {
+    // Apply saved theme on load
+    const savedTheme = localStorage.getItem('elevate_theme') || 'default';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    // Listen for theme changes from Settings
+    const handleThemeChange = () => {
+      const t = localStorage.getItem('elevate_theme') || 'default';
+      document.documentElement.setAttribute('data-theme', t);
+    };
+    window.addEventListener('theme-change', handleThemeChange);
+    return () => window.removeEventListener('theme-change', handleThemeChange);
+  }, []);
+
+  React.useEffect(() => {
     console.log(`[Navigation] Active Tab changed to: ${activeTab}`);
     
     // Check if localStorage is working

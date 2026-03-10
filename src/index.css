@@ -112,3 +112,76 @@
     @apply font-sans antialiased;
   }
 }
+
+/* Theme variables */
+:root {
+  --theme-accent: #10b981;
+  --theme-accent-light: rgba(16, 185, 129, 0.1);
+  --theme-accent-border: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="cyber"] {
+  --theme-accent: #00fff5;
+  --theme-accent-light: rgba(0, 255, 245, 0.1);
+  --theme-accent-border: rgba(0, 255, 245, 0.2);
+}
+[data-theme="red"] {
+  --theme-accent: #ef4444;
+  --theme-accent-light: rgba(239, 68, 68, 0.1);
+  --theme-accent-border: rgba(239, 68, 68, 0.2);
+}
+[data-theme="purple"] {
+  --theme-accent: #a855f7;
+  --theme-accent-light: rgba(168, 85, 247, 0.1);
+  --theme-accent-border: rgba(168, 85, 247, 0.2);
+}
+[data-theme="gold"] {
+  --theme-accent: #f59e0b;
+  --theme-accent-light: rgba(245, 158, 11, 0.1);
+  --theme-accent-border: rgba(245, 158, 11, 0.2);
+}
+
+/* Apply theme accent to emerald classes override */
+[data-theme="cyber"] .bg-emerald-500 { background-color: #00fff5 !important; }
+[data-theme="cyber"] .text-emerald-500 { color: #00fff5 !important; }
+[data-theme="cyber"] .border-emerald-500 { border-color: #00fff5 !important; }
+[data-theme="cyber"] .text-emerald-400 { color: #00fff5 !important; }
+[data-theme="cyber"] .bg-emerald-500\/10 { background-color: rgba(0,255,245,0.1) !important; }
+[data-theme="cyber"] .bg-emerald-500\/20 { background-color: rgba(0,255,245,0.2) !important; }
+[data-theme="cyber"] .shadow-emerald-500\/20 { --tw-shadow-color: rgba(0,255,245,0.2) !important; }
+[data-theme="cyber"] .focus\:ring-emerald-500:focus { --tw-ring-color: #00fff5 !important; }
+[data-theme="cyber"] .hover\:bg-emerald-500:hover { background-color: #00fff5 !important; }
+[data-theme="cyber"] .hover\:text-emerald-500:hover { color: #00fff5 !important; }
+
+[data-theme="red"] .bg-emerald-500 { background-color: #ef4444 !important; }
+[data-theme="red"] .text-emerald-500 { color: #ef4444 !important; }
+[data-theme="red"] .border-emerald-500 { border-color: #ef4444 !important; }
+[data-theme="red"] .text-emerald-400 { color: #ef4444 !important; }
+[data-theme="red"] .bg-emerald-500\/10 { background-color: rgba(239,68,68,0.1) !important; }
+[data-theme="red"] .bg-emerald-500\/20 { background-color: rgba(239,68,68,0.2) !important; }
+[data-theme="red"] .shadow-emerald-500\/20 { --tw-shadow-color: rgba(239,68,68,0.2) !important; }
+[data-theme="red"] .focus\:ring-emerald-500:focus { --tw-ring-color: #ef4444 !important; }
+[data-theme="red"] .hover\:bg-emerald-500:hover { background-color: #ef4444 !important; }
+[data-theme="red"] .hover\:text-emerald-500:hover { color: #ef4444 !important; }
+
+[data-theme="purple"] .bg-emerald-500 { background-color: #a855f7 !important; }
+[data-theme="purple"] .text-emerald-500 { color: #a855f7 !important; }
+[data-theme="purple"] .border-emerald-500 { border-color: #a855f7 !important; }
+[data-theme="purple"] .text-emerald-400 { color: #a855f7 !important; }
+[data-theme="purple"] .bg-emerald-500\/10 { background-color: rgba(168,85,247,0.1) !important; }
+[data-theme="purple"] .bg-emerald-500\/20 { background-color: rgba(168,85,247,0.2) !important; }
+[data-theme="purple"] .shadow-emerald-500\/20 { --tw-shadow-color: rgba(168,85,247,0.2) !important; }
+[data-theme="purple"] .focus\:ring-emerald-500:focus { --tw-ring-color: #a855f7 !important; }
+[data-theme="purple"] .hover\:bg-emerald-500:hover { background-color: #a855f7 !important; }
+[data-theme="purple"] .hover\:text-emerald-500:hover { color: #a855f7 !important; }
+
+[data-theme="gold"] .bg-emerald-500 { background-color: #f59e0b !important; }
+[data-theme="gold"] .text-emerald-500 { color: #f59e0b !important; }
+[data-theme="gold"] .border-emerald-500 { border-color: #f59e0b !important; }
+[data-theme="gold"] .text-emerald-400 { color: #f59e0b !important; }
+[data-theme="gold"] .bg-emerald-500\/10 { background-color: rgba(245,158,11,0.1) !important; }
+[data-theme="gold"] .bg-emerald-500\/20 { background-color: rgba(245,158,11,0.2) !important; }
+[data-theme="gold"] .shadow-emerald-500\/20 { --tw-shadow-color: rgba(245,158,11,0.2) !important; }
+[data-theme="gold"] .focus\:ring-emerald-500:focus { --tw-ring-color: #f59e0b !important; }
+[data-theme="gold"] .hover\:bg-emerald-500:hover { background-color: #f59e0b !important; }
+[data-theme="gold"] .hover\:text-emerald-500:hover { color: #f59e0b !important; }
