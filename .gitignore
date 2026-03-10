@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+users.json
+config.json
+metadata.json
+.env.example
+.env.example
