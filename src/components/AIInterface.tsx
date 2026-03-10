@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
 import { Send, Bot, User, Volume2, Mic, Brain, Trash2, Plus, Info, Heart, Edit2, RotateCcw, Search, Calendar, MessageCircle, Copy, Check, Paperclip, X, Loader2, Image as ImageIcon } from 'lucide-react';
@@ -10,27 +10,20 @@ import { motion, AnimatePresence } from 'motion/react';
 
 type Message = { id: string; role: 'user' | 'assistant'; content: string; timestamp: Date; };
 
-// Typewriter hook — reveals text char by char
-const useTypewriter = (text: string, active: boolean, speed = 8) => {
+const useTypewriter = (text: string, active: boolean, speed = 6) => {
   const [displayed, setDisplayed] = useState('');
-  const [done, setDone] = useState(false);
   useEffect(() => {
-    if (!active) { setDisplayed(text); setDone(true); return; }
+    if (!active) { setDisplayed(text); return; }
     setDisplayed('');
-    setDone(false);
     let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      setDisplayed(text.slice(0, i));
-      if (i >= text.length) { setDone(true); clearInterval(interval); }
-    }, speed);
-    return () => clearInterval(interval);
+    const t = setInterval(() => { i++; setDisplayed(text.slice(0, i)); if (i >= text.length) clearInterval(t); }, speed);
+    return () => clearInterval(t);
   }, [text, active]);
-  return { displayed, done };
+  return displayed;
 };
 
 const TypewriterMessage = ({ content, isNew }: { content: string; isNew: boolean }) => {
-  const { displayed } = useTypewriter(content, isNew, 6);
+  const displayed = useTypewriter(content, isNew);
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayed}</ReactMarkdown>
@@ -38,8 +31,28 @@ const TypewriterMessage = ({ content, isNew }: { content: string; isNew: boolean
   );
 };
 
+const MODELS = [
+  { id: 'gemini-2.5-flash-lite', name: 'Flash Lite', desc: 'Fastest · Lowest quota' },
+  { id: 'gemini-2.5-flash', name: 'Flash 2.5', desc: 'Balanced · Recommended' },
+  { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Smartest · High quota' },
+];
+
+const VOICE_LENGTHS = [
+  { id: 'short', label: 'Short', desc: '~40 words', chars: 200 },
+  { id: 'medium', label: 'Medium', desc: '~120 words', chars: 600 },
+  { id: 'full', label: 'Full', desc: '~240 words', chars: 1200 },
+];
+
+const MODES = [
+  { id: 'chat', icon: MessageCircle, label: 'Chat' },
+  { id: 'research', icon: Search, label: 'Research' },
+  { id: 'supporter', icon: Heart, label: 'Support' },
+  { id: 'planner', icon: Calendar, label: 'Planner' },
+] as const;
+
 export const AIInterface: React.FC = () => {
   const { habits, tasks, aiMemory, aiSettings, userProfile, chatHistory, setChatHistory, clearChatHistory, addMemory, deleteMemory, updateAISettings, addTask, deleteTask, toggleTask, addHabit, deleteHabit, toggleHabitLog, incrementMessageCount } = useAppContext();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,21 +60,30 @@ export const AIInterface: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState<string | null>(null);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState<string | null>(null);
   const [autoPlay, setAutoPlay] = useState(() => localStorage.getItem('elevate_autoplay') === 'true');
-  const [bgImage, setBgImage] = useState<string | null>(() => localStorage.getItem('elevate_ai_bg') || null);
-  const [bgType, setBgType] = useState<'image' | 'video'>(() => (localStorage.getItem('elevate_ai_bg_type') as any) || 'image');
+  const [voiceLength, setVoiceLength] = useState(() => localStorage.getItem('elevate_voice_len') || 'medium');
+  const [bg, setBg] = useState<string | null>(() => localStorage.getItem('elevate_ai_bg') || null);
+  const [bgType, setBgType] = useState<'image'|'video'>(() => (localStorage.getItem('elevate_ai_bg_type') as any) || 'image');
   const [latestAiId, setLatestAiId] = useState<string | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const [showModelMenu, setShowModelMenu] = useState(false);
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [liveListening, setLiveListening] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<{ name: string, content: string } | null>(null);
+  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
   const [isListening, setIsListening] = useState(false);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const recognitionRef = useRef<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isLiveModeRef = useRef(false);
+
+  useEffect(() => { isLiveModeRef.current = isLiveMode; }, [isLiveMode]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -70,324 +92,395 @@ export const AIInterface: React.FC = () => {
     }
   }, [input]);
 
+  const startLiveListening = () => {
+    if (!recognitionRef.current) return;
+    try { setLiveListening(true); recognitionRef.current.start(); } catch {}
+  };
+
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SR) {
-      recognitionRef.current = new SR();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
-      recognitionRef.current.onresult = (e: any) => { setInput(p => p + (p ? ' ' : '') + e.results[0][0].transcript); setIsListening(false); };
-      recognitionRef.current.onerror = () => setIsListening(false);
-      recognitionRef.current.onend = () => setIsListening(false);
-    }
+    if (!SR) return;
+    recognitionRef.current = new SR();
+    recognitionRef.current.continuous = false;
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.lang = 'en-US';
+    recognitionRef.current.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setIsListening(false); setLiveListening(false);
+      if (isLiveModeRef.current) { handleSend(transcript); }
+      else { setInput(p => p + (p ? ' ' : '') + transcript); }
+    };
+    recognitionRef.current.onerror = () => { setIsListening(false); setLiveListening(false); };
+    recognitionRef.current.onend = () => { setIsListening(false); setLiveListening(false); };
   }, []);
 
   useEffect(() => {
     if (chatHistory.length > 0) {
       setMessages(chatHistory.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
     } else {
-      setMessages([{
-        id: 'welcome-msg', role: 'assistant',
-        content: `Hello! I'm **${aiSettings.name}**, your **${aiSettings.persona}**.\n\n**To get started:**\n- Go to **Settings** → add your **Gemini API Key** (free at aistudio.google.com)\n- Fill in your **Profile** so I know your goals\n- Ask me to add habits or tasks directly here\n- Use 🎙️ for voice input\n\nHow can I help you today?`,
-        timestamp: new Date()
-      }]);
+      setMessages([{ id: 'welcome', role: 'assistant', content: `Hello! I'm **${aiSettings.name}**, your **${aiSettings.persona}**.\n\n- Go to **Settings** → add your **Gemini API Key** (free at aistudio.google.com)\n- Fill in your Profile so I know your goals\n- Ask me to add habits or tasks here\n- Use 🎙️ for voice, or the call button for live mode\n\nHow can I help?`, timestamp: new Date() }]);
     }
-  }, [chatHistory, aiSettings.name, aiSettings.persona]);
+  }, [aiSettings.name, aiSettings.persona]);
 
   useEffect(() => {
     if (messages.length > 0) {
       const h = messages.map(m => ({ ...m, timestamp: m.timestamp.toISOString() }));
       if (JSON.stringify(h) !== JSON.stringify(chatHistory)) setChatHistory(h);
     }
-  }, [messages, setChatHistory]);
+  }, [messages]);
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, isLoading]);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, isLoading]);
 
-  // Auto-play voice when new AI message arrives
   useEffect(() => {
     if (autoPlay && latestAiId && aiSettings.apiKey) {
       const msg = messages.find(m => m.id === latestAiId);
       if (msg) speak(msg.content, msg.id);
     }
-  }, [latestAiId, autoPlay]);
+  }, [latestAiId]);
 
-  const generateSystemInstruction = () => {
-    const habitsList = habits.map(h => `- ${h.name} (ID: ${h.id})`).join('\n');
-    const tasksList = tasks.map(t => `- ${t.name} (ID: ${t.id}, Date: ${t.date}, Done: ${t.completed})`).join('\n');
-    const memoryList = aiMemory.map(m => `- ${m.content}`).join('\n');
-    let userCtx = `Name: ${userProfile?.name || 'User'}\n`;
-    if (userProfile?.about) userCtx += `About: ${userProfile.about}\n`;
-    if (userProfile?.goals) userCtx += `Goals: ${userProfile.goals}\n`;
-    return `You are ${aiSettings.name}, a highly intelligent and emotionally aware ${aiSettings.persona}.
-Mode: ${aiSettings.mode.toUpperCase()}
-Behavior: ${aiSettings.behavior}
-USER: ${userCtx}
-HABITS:\n${habitsList || 'None'}
-TASKS:\n${tasksList || 'None'}
-MEMORY:\n${memoryList || 'None'}
+  const generateSystem = () => {
+    let ctx = `Name: ${userProfile?.name || 'User'}\n`;
+    if (userProfile?.about) ctx += `About: ${userProfile.about}\n`;
+    if (userProfile?.goals) ctx += `Goals: ${userProfile.goals}\n`;
+    return `You are ${aiSettings.name}, a highly intelligent ${aiSettings.persona}.
+Mode: ${aiSettings.mode} | Behavior: ${aiSettings.behavior}
+USER: ${ctx}
+HABITS: ${habits.map(h => `${h.name}(${h.id})`).join(', ') || 'None'}
+TASKS: ${tasks.map(t => `${t.name}(${t.id},${t.date},done:${t.completed})`).join(', ') || 'None'}
+MEMORY: ${aiMemory.map(m => m.content).join(' | ') || 'None'}
 Today: ${format(new Date(), 'yyyy-MM-dd')}
-RULES:
-- Be natural, warm, human. Never say "As an AI".
-- Use clean Markdown: bold for emphasis, bullets for lists.
-- Keep responses concise unless depth is needed.
-- You can manage tasks and habits using tools.
-- Prioritize mental wellbeing.`;
+Be natural, warm, human. Use clean Markdown. Stay concise. Prioritize wellbeing.`;
   };
 
-  const handleSend = async (overrideInput?: string, resendFromIndex?: number) => {
-    const messageText = overrideInput || input;
-    if (!messageText.trim() && !attachedFile) return;
+  const handleSend = async (overrideInput?: string, fromIndex?: number) => {
+    const text = overrideInput || input;
+    if (!text.trim() && !attachedFile) return;
     if (!aiSettings.apiKey) return;
-    let newMessages = [...messages];
-    if (resendFromIndex !== undefined) newMessages = newMessages.slice(0, resendFromIndex);
-    const fullContent = attachedFile ? `[File: ${attachedFile.name}]\n${attachedFile.content}\n\nUser: ${messageText}` : messageText;
-    const userMessage: Message = { id: `u-${Date.now()}`, role: 'user', content: fullContent, timestamp: new Date() };
-    const updatedMessages = [...newMessages, userMessage];
-    setMessages(updatedMessages);
+    let msgs = [...messages];
+    if (fromIndex !== undefined) msgs = msgs.slice(0, fromIndex);
+    const content = attachedFile ? `[File: ${attachedFile.name}]\n${attachedFile.content}\n\nUser: ${text}` : text;
+    const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content, timestamp: new Date() };
+    const updated = [...msgs, userMsg];
+    setMessages(updated);
     setInput(''); setAttachedFile(null); setEditingMessageId(null); setIsLoading(true);
     try {
       const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
-      const toolDeclarations: FunctionDeclaration[] = [
-        { name: "addTask", description: "Add a task", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["name", "date"] } },
-        { name: "deleteTask", description: "Delete a task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
+      const tools: FunctionDeclaration[] = [
+        { name: "addTask", description: "Add task", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["name","date"] } },
+        { name: "deleteTask", description: "Delete task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
         { name: "toggleTask", description: "Toggle task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
-        { name: "addHabit", description: "Add a habit", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, category: { type: Type.STRING }, icon: { type: Type.STRING } }, required: ["name", "category", "icon"] } },
-        { name: "deleteHabit", description: "Delete a habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
-        { name: "toggleHabitLog", description: "Log habit for date", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id", "date"] } },
+        { name: "addHabit", description: "Add habit", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, category: { type: Type.STRING }, icon: { type: Type.STRING } }, required: ["name","category","icon"] } },
+        { name: "deleteHabit", description: "Delete habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
+        { name: "toggleHabitLog", description: "Log habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id","date"] } },
       ];
-      const response = await ai.models.generateContent({
-        model: aiSettings.model || "gemini-1.5-flash",
-        contents: updatedMessages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-        config: { systemInstruction: generateSystemInstruction(), tools: [{ functionDeclarations: toolDeclarations }] }
+      const res = await ai.models.generateContent({
+        model: aiSettings.model || 'gemini-2.5-flash',
+        contents: updated.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        config: { systemInstruction: generateSystem(), tools: [{ functionDeclarations: tools }] }
       });
-      const functionCalls = response.functionCalls;
-      if (functionCalls) {
-        for (const call of functionCalls) {
-          const { name, args } = call;
-          if (name === 'addTask') addTask(args.name as string, args.date as string);
-          if (name === 'deleteTask') deleteTask(args.id as string);
-          if (name === 'toggleTask') toggleTask(args.id as string);
-          if (name === 'addHabit') addHabit(args.name as string, args.category as string, args.icon as string);
-          if (name === 'deleteHabit') deleteHabit(args.id as string);
-          if (name === 'toggleHabitLog') toggleHabitLog(args.id as string, args.date as string);
+      const calls = res.functionCalls;
+      if (calls) {
+        for (const c of calls) {
+          if (c.name === 'addTask') addTask(c.args.name as string, c.args.date as string);
+          if (c.name === 'deleteTask') deleteTask(c.args.id as string);
+          if (c.name === 'toggleTask') toggleTask(c.args.id as string);
+          if (c.name === 'addHabit') addHabit(c.args.name as string, c.args.category as string, c.args.icon as string);
+          if (c.name === 'deleteHabit') deleteHabit(c.args.id as string);
+          if (c.name === 'toggleHabitLog') toggleHabitLog(c.args.id as string, c.args.date as string);
         }
       }
-      const aiContent = response.text || (functionCalls ? "Done! ✅" : "Couldn't process that. Please try again.");
+      const aiText = res.text || (calls ? 'Done ✅' : "Couldn't process that.");
       const newId = `a-${Date.now()}`;
-      setMessages(prev => [...prev, { id: newId, role: 'assistant', content: aiContent, timestamp: new Date() }]);
+      setMessages(prev => [...prev, { id: newId, role: 'assistant', content: aiText, timestamp: new Date() }]);
       setLatestAiId(newId);
       incrementMessageCount();
-      if (aiContent.length > 100 || messageText.includes('remember')) {
-        addMemory(`User: "${messageText.substring(0, 60)}..." → AI: "${aiContent.substring(0, 60)}..."`, 'auto');
-      }
-    } catch (error: any) {
-      setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: `⚠️ ${error.message || "Failed to connect. Check your API key in Settings."}`, timestamp: new Date() }]);
-    } finally {
-      setIsLoading(false);
-    }
+      if (aiText.length > 100 || text.includes('remember')) addMemory(`User: "${text.substring(0,60)}..." → AI: "${aiText.substring(0,60)}..."`, 'auto');
+    } catch (err: any) {
+      const msg = err.message || '';
+      const isQuota = msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate');
+      setMessages(prev => [...prev, {
+        id: `err-${Date.now()}`, role: 'assistant',
+        content: isQuota
+          ? `⚠️ **Quota limit reached.** Free tier resets daily at midnight (Pacific Time). Try switching to **Flash Lite** model in the chat header, or wait until tomorrow.`
+          : `⚠️ ${msg || 'Failed. Check your API key in Settings.'}`,
+        timestamp: new Date()
+      }]);
+    } finally { setIsLoading(false); }
   };
 
-  const stopSpeaking = () => {
+  const stopSpeaking = (resumeLive = true) => {
     audioSourceRef.current?.stop();
     audioSourceRef.current = null;
-    setIsSpeaking(null);
-    setIsGeneratingVoice(null);
+    setIsSpeaking(null); setIsGeneratingVoice(null);
+    if (resumeLive && isLiveModeRef.current) setTimeout(startLiveListening, 600);
   };
 
   const speak = async (text: string, msgId: string) => {
-    if (isSpeaking === msgId) { stopSpeaking(); return; }
+    if (isSpeaking === msgId) { stopSpeaking(false); return; }
     if (!aiSettings.apiKey) return;
-    stopSpeaking();
+    stopSpeaking(false);
     setIsGeneratingVoice(msgId);
-    // Strip markdown for cleaner TTS
-    const cleanText = text.replace(/[#*`_~\[\]()>]/g, '').replace(/\n+/g, ' ').substring(0, 800);
+    const vl = VOICE_LENGTHS.find(v => v.id === voiceLength) || VOICE_LENGTHS[1];
+    const clean = text.replace(/[#*`_~\[\]()>]/g, '').replace(/\n+/g, ' ').substring(0, vl.chars);
     try {
       const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: cleanText }] }],
-        config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: aiSettings.voice || 'Zephyr' } } } },
+      const res = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: [{ parts: [{ text: clean }] }],
+        config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: aiSettings.voice || 'Zephyr' } } } }
       });
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        const bytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
-        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const ctx = audioContextRef.current;
-        let audioBuffer: AudioBuffer;
-        try { audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0)); }
-        catch {
-          const pcm = new Int16Array(bytes.buffer);
-          const f32 = new Float32Array(pcm.length);
-          for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
-          audioBuffer = ctx.createBuffer(1, f32.length, 24000);
-          audioBuffer.getChannelData(0).set(f32);
-        }
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        source.onended = () => { setIsSpeaking(null); audioSourceRef.current = null; };
-        audioSourceRef.current = source;
-        setIsGeneratingVoice(null);
-        setIsSpeaking(msgId);
-        source.start(0);
-      } else { setIsGeneratingVoice(null); }
+      const b64 = res.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!b64) { setIsGeneratingVoice(null); return; }
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = audioContextRef.current;
+      let buf: AudioBuffer;
+      try { buf = await ctx.decodeAudioData(bytes.buffer.slice(0)); }
+      catch {
+        const pcm = new Int16Array(bytes.buffer);
+        const f32 = new Float32Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
+        buf = ctx.createBuffer(1, f32.length, 24000);
+        buf.getChannelData(0).set(f32);
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.connect(ctx.destination);
+      src.onended = () => { audioSourceRef.current = null; setIsSpeaking(null); if (isLiveModeRef.current) setTimeout(startLiveListening, 600); };
+      audioSourceRef.current = src;
+      setIsGeneratingVoice(null); setIsSpeaking(msgId);
+      src.start(0);
     } catch { setIsGeneratingVoice(null); }
   };
 
-  const copyToClipboard = async (text: string, id: string) => {
+  const copy = async (text: string, id: string) => {
     try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); } catch {}
   };
 
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const isVideo = file.type.startsWith('video/');
-    const reader = new FileReader();
-    reader.onload = ev => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const isVid = f.type.startsWith('video/');
+    const r = new FileReader();
+    r.onload = ev => {
       const url = ev.target?.result as string;
-      setBgImage(url);
-      setBgType(isVideo ? 'video' : 'image');
+      setBg(url); setBgType(isVid ? 'video' : 'image');
       localStorage.setItem('elevate_ai_bg', url);
-      localStorage.setItem('elevate_ai_bg_type', isVideo ? 'video' : 'image');
+      localStorage.setItem('elevate_ai_bg_type', isVid ? 'video' : 'image');
     };
-    reader.readAsDataURL(file);
+    r.readAsDataURL(f);
   };
 
-  const removeBg = () => { setBgImage(null); localStorage.removeItem('elevate_ai_bg'); localStorage.removeItem('elevate_ai_bg_type'); };
-
-  const toggleAutoPlay = () => {
-    const next = !autoPlay;
-    setAutoPlay(next);
-    localStorage.setItem('elevate_autoplay', String(next));
-  };
-
-  const modes = [
-    { id: 'chat', icon: MessageCircle, label: 'Chat' },
-    { id: 'research', icon: Search, label: 'Research' },
-    { id: 'supporter', icon: Heart, label: 'Support' },
-    { id: 'planner', icon: Calendar, label: 'Planner' },
-  ] as const;
+  const removeBg = () => { setBg(null); localStorage.removeItem('elevate_ai_bg'); localStorage.removeItem('elevate_ai_bg_type'); };
+  const currentModel = MODELS.find(m => m.id === aiSettings.model) || MODELS[1];
+  const currentVl = VOICE_LENGTHS.find(v => v.id === voiceLength) || VOICE_LENGTHS[1];
 
   return (
-    <div className="flex h-full transition-colors relative">
+    <div className="flex h-full relative">
       {/* Background */}
-      {bgImage && (
+      {bg && (
         <div className="absolute inset-0 z-0 pointer-events-none">
-          {bgType === 'video' ? (
-            <video src={bgImage} autoPlay loop muted playsInline className="w-full h-full object-cover" />
-          ) : (
-            <img src={bgImage} alt="" className="w-full h-full object-cover" />
-          )}
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          {bgType === 'video'
+            ? <video src={bg} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+            : <img src={bg} alt="" className="w-full h-full object-cover" />}
+          <div className="absolute inset-0 bg-black/50" />
         </div>
       )}
 
+      {/* Live Mode Overlay */}
+      <AnimatePresence>
+        {isLiveMode && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center"
+            style={{ background: bg ? 'rgba(0,0,0,0.75)' : 'rgba(8,8,16,0.98)' }}>
+            {bg && (bgType === 'video'
+              ? <video src={bg} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover opacity-25" />
+              : <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover opacity-25" />)}
+            <div className="relative z-10 flex flex-col items-center gap-5 text-center">
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden shadow-2xl shadow-emerald-500/40">
+                  {aiSettings.avatar ? <img src={aiSettings.avatar} alt="" className="w-full h-full object-cover" /> : <Bot size={44} className="text-white" />}
+                </div>
+                {liveListening && <div className="absolute inset-0 rounded-full border-2 border-emerald-400/60 animate-ping" />}
+              </div>
+              <div>
+                <p className="text-white font-bold text-lg">{aiSettings.name}</p>
+                <p className="text-emerald-400 text-xs uppercase tracking-widest mt-1">
+                  {isGeneratingVoice ? 'Thinking...' : isSpeaking ? 'Speaking...' : liveListening ? 'Listening...' : 'Tap mic to speak'}
+                </p>
+              </div>
+              <div className="flex items-end gap-1.5 h-8">
+                {[...Array(5)].map((_, i) => (
+                  <motion.div key={i} className="w-2 rounded-full bg-emerald-500"
+                    animate={{ height: (liveListening || !!isSpeaking) ? [8, 28, 8] : 8 }}
+                    transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.12 }} />
+                ))}
+              </div>
+              <div className="flex gap-3 mt-2">
+                <button onClick={startLiveListening} disabled={liveListening || !!isSpeaking || isLoading}
+                  className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg hover:bg-emerald-600 disabled:opacity-40 transition-all">
+                  <Mic size={22} />
+                </button>
+                <button onClick={() => { setIsLiveMode(false); setLiveListening(false); recognitionRef.current?.stop(); stopSpeaking(false); }}
+                  className="w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg hover:bg-red-600 transition-all">
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
         {/* Header */}
-        <header className={cn("border-b px-3 md:px-6 py-2 md:py-3 flex items-center justify-between gap-2 z-10 transition-colors",
-          bgImage ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
-          <div className="flex items-center gap-2 md:gap-3 min-w-0">
-            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 overflow-hidden flex-shrink-0">
-              {aiSettings.avatar ? <img src={aiSettings.avatar} alt="" className="w-full h-full object-cover" /> : <Bot size={18} />}
+        <header className={cn("border-b px-3 py-2 flex items-center justify-between gap-2 z-20",
+          bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
+
+          {/* Left */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-white overflow-hidden flex-shrink-0">
+              {aiSettings.avatar ? <img src={aiSettings.avatar} alt="" className="w-full h-full object-cover" /> : <Bot size={16} />}
             </div>
-            <div className="min-w-0">
-              <h2 className={cn("font-bold text-sm truncate", bgImage && "text-white")}>{aiSettings.name}</h2>
-              <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />{aiSettings.mode}
-              </p>
+            <div className="min-w-0 relative">
+              <p className={cn("font-bold text-xs truncate", bg && "text-white")}>{aiSettings.name}</p>
+              <button onClick={() => setShowModelMenu(!showModelMenu)}
+                className="flex items-center gap-1 text-[9px] font-bold text-emerald-500 uppercase tracking-widest hover:text-emerald-400">
+                <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />{currentModel.name} ▾
+              </button>
+              <AnimatePresence>
+                {showModelMenu && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    {MODELS.map(m => (
+                      <button key={m.id} onClick={() => { updateAISettings({ model: m.id }); setShowModelMenu(false); }}
+                        className={cn("w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0",
+                          aiSettings.model === m.id && "bg-emerald-50 dark:bg-emerald-500/10")}>
+                        <p className={cn("text-xs font-bold", aiSettings.model === m.id ? "text-emerald-600 dark:text-emerald-400" : "text-gray-800 dark:text-gray-200")}>{m.name}</p>
+                        <p className="text-[9px] text-gray-400 mt-0.5">{m.desc}</p>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
-            <div className={cn("flex p-0.5 rounded-xl overflow-x-auto no-scrollbar max-w-[140px] sm:max-w-none", bgImage ? "bg-white/10" : "bg-gray-100 dark:bg-white/5")}>
-              {modes.map(mode => (
+          {/* Right controls */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Mode pills — hidden on small mobile */}
+            <div className={cn("hidden md:flex p-0.5 rounded-xl gap-0.5", bg ? "bg-white/10" : "bg-gray-100 dark:bg-white/5")}>
+              {MODES.map(mode => (
                 <button key={mode.id} onClick={() => updateAISettings({ mode: mode.id })}
-                  className={cn("flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all text-[9px] font-bold uppercase tracking-widest flex-shrink-0",
-                    aiSettings.mode === mode.id ? "bg-white dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm" : cn("text-gray-400", bgImage && "text-white/50"))}>
-                  <mode.icon size={11} /><span className="hidden sm:inline">{mode.label}</span>
+                  className={cn("flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all",
+                    aiSettings.mode === mode.id ? "bg-white dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-sm" : "text-gray-400")}>
+                  <mode.icon size={10} />{mode.label}
                 </button>
               ))}
             </div>
 
-            {/* Auto-play toggle */}
-            <button onClick={toggleAutoPlay} title={autoPlay ? "Auto-play ON" : "Auto-play OFF"}
-              className={cn("p-1.5 rounded-xl transition-all text-xs font-bold", autoPlay ? "bg-emerald-500 text-white" : cn("text-gray-400", bgImage ? "bg-white/10 hover:bg-white/20" : "bg-gray-100 dark:bg-white/5"))}>
-              <Volume2 size={15} />
+            {/* Voice length */}
+            <div className="relative">
+              <button onClick={() => setShowVoiceMenu(!showVoiceMenu)}
+                className={cn("px-2 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
+                  bg ? "bg-white/10 text-white/70" : "bg-gray-100 dark:bg-white/5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300")}>
+                🔊 {currentVl.label}
+              </button>
+              <AnimatePresence>
+                {showVoiceMenu && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="absolute top-full right-0 mt-1 w-40 bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    {VOICE_LENGTHS.map(v => (
+                      <button key={v.id} onClick={() => { setVoiceLength(v.id); localStorage.setItem('elevate_voice_len', v.id); setShowVoiceMenu(false); }}
+                        className={cn("w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0",
+                          voiceLength === v.id && "bg-emerald-50 dark:bg-emerald-500/10")}>
+                        <p className={cn("text-xs font-bold", voiceLength === v.id ? "text-emerald-600 dark:text-emerald-400" : "text-gray-700 dark:text-gray-300")}>{v.label}</p>
+                        <p className="text-[9px] text-gray-400">{v.desc}</p>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Auto-play */}
+            <button onClick={() => { const n = !autoPlay; setAutoPlay(n); localStorage.setItem('elevate_autoplay', String(n)); }}
+              title={autoPlay ? "Auto-play ON" : "Auto-play OFF"}
+              className={cn("p-1.5 rounded-xl transition-all", autoPlay ? "bg-emerald-500 text-white" : cn("text-gray-400", bg ? "bg-white/10" : "bg-gray-100 dark:bg-white/5"))}>
+              <Volume2 size={14} />
             </button>
 
-            {/* Background image button */}
+            {/* Live call */}
+            <button onClick={() => setIsLiveMode(true)}
+              className={cn("p-1.5 rounded-xl transition-all text-gray-400 hover:text-emerald-500", bg ? "bg-white/10 hover:bg-emerald-500/30" : "bg-gray-100 dark:bg-white/5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10")}>
+              <Mic size={14} />
+            </button>
+
+            {/* Background */}
             <input type="file" ref={bgInputRef} onChange={handleBgUpload} className="hidden" accept="image/*,video/*" />
-            <button onClick={() => bgImage ? removeBg() : bgInputRef.current?.click()} title={bgImage ? "Remove background" : "Set background image"}
-              className={cn("p-1.5 rounded-xl transition-all", bgImage ? "bg-purple-500 text-white" : cn("text-gray-400", bgImage ? "bg-white/10" : "bg-gray-100 dark:bg-white/5"))}>
-              <ImageIcon size={15} />
+            <button onClick={() => bg ? removeBg() : bgInputRef.current?.click()}
+              className={cn("p-1.5 rounded-xl transition-all", bg ? "bg-purple-500 text-white" : cn("text-gray-400", "bg-gray-100 dark:bg-white/5"))}>
+              <ImageIcon size={14} />
             </button>
 
             <button onClick={() => { if (confirm("Clear chat?")) clearChatHistory(); }}
-              className={cn("p-1.5 rounded-xl transition-all text-gray-400 hover:text-red-500", bgImage ? "bg-white/10 hover:bg-red-500/20" : "bg-gray-100 dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-500/10")}>
-              <Trash2 size={15} />
+              className={cn("p-1.5 rounded-xl text-gray-400 hover:text-red-500 transition-all", bg ? "bg-white/10" : "bg-gray-100 dark:bg-white/5")}>
+              <Trash2 size={14} />
             </button>
+
             <button onClick={() => setShowMemory(!showMemory)}
-              className={cn("p-1.5 rounded-xl transition-all", showMemory ? "bg-emerald-500 text-white" : cn("text-gray-400", bgImage ? "bg-white/10" : "bg-gray-100 dark:bg-white/5"))}>
-              <Brain size={15} />
+              className={cn("p-1.5 rounded-xl transition-all", showMemory ? "bg-emerald-500 text-white" : cn("text-gray-400", bg ? "bg-white/10" : "bg-gray-100 dark:bg-white/5"))}>
+              <Brain size={14} />
             </button>
           </div>
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 scroll-smooth pb-28">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 md:p-5 space-y-4 pb-28">
           {messages.map((msg, i) => (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} key={msg.id}
               className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[88%] md:max-w-[80%] flex gap-2 md:gap-3", msg.role === 'user' ? "flex-row-reverse" : "flex-row")}>
-                <div className={cn("w-7 h-7 md:w-8 md:h-8 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden",
+              <div className={cn("max-w-[88%] md:max-w-[78%] flex gap-2", msg.role === 'user' ? "flex-row-reverse" : "flex-row")}>
+                <div className={cn("w-7 h-7 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden",
                   msg.role === 'user' ? "bg-[#141414] dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#141414] text-emerald-500 border border-black/5 dark:border-white/5",
-                  bgImage && msg.role === 'assistant' && "bg-white/20 backdrop-blur-sm border-white/20")}>
+                  bg && msg.role === 'assistant' && "bg-white/15 border-white/15")}>
                   {msg.role === 'user'
-                    ? (userProfile?.avatar ? <img src={userProfile.avatar} alt="" className="w-full h-full object-cover" /> : <User size={14} />)
-                    : (aiSettings.avatar ? <img src={aiSettings.avatar} alt="" className="w-full h-full object-cover" /> : <Bot size={14} />)}
+                    ? (userProfile?.avatar ? <img src={userProfile.avatar} alt="" className="w-full h-full object-cover" /> : <User size={13} />)
+                    : (aiSettings.avatar ? <img src={aiSettings.avatar} alt="" className="w-full h-full object-cover" /> : <Bot size={13} />)}
                 </div>
                 <div className="space-y-1 group min-w-0">
-                  <div className={cn("px-3 py-2.5 md:px-4 md:py-3 rounded-2xl text-sm leading-relaxed relative",
+                  <div className={cn("px-3 py-2.5 rounded-2xl text-sm leading-relaxed",
                     msg.role === 'user'
-                      ? cn("rounded-tr-sm", bgImage ? "bg-emerald-500/80 text-white backdrop-blur-sm" : "bg-[#141414] dark:bg-white text-white dark:text-black")
-                      : cn("rounded-tl-sm border", bgImage ? "bg-black/40 text-white border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] text-gray-800 dark:text-gray-200 border-black/5 dark:border-white/5"))}>
+                      ? cn("rounded-tr-sm", bg ? "bg-emerald-500/80 text-white backdrop-blur-sm" : "bg-[#141414] dark:bg-white text-white dark:text-black")
+                      : cn("rounded-tl-sm border", bg ? "bg-black/40 text-white border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] text-gray-800 dark:text-gray-200 border-black/5 dark:border-white/5"))}>
                     {editingMessageId === msg.id ? (
-                      <div className="space-y-3">
-                        <textarea value={editInput} onChange={e => setEditInput(e.target.value)}
-                          className="w-full bg-transparent border-none focus:ring-0 text-inherit resize-none min-h-[80px] text-sm" autoFocus />
+                      <div className="space-y-2">
+                        <textarea value={editInput} onChange={e => setEditInput(e.target.value)} autoFocus
+                          className="w-full bg-transparent border-none focus:ring-0 resize-none min-h-[70px] text-sm" />
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => setEditingMessageId(null)} className="text-[10px] font-bold uppercase px-3 py-1.5 rounded-lg opacity-60">Cancel</button>
-                          <button onClick={() => { setMessages(prev => [...prev.slice(0, i)]); handleSend(editInput); setEditingMessageId(null); }}
-                            className="text-[10px] font-bold uppercase px-3 py-1.5 bg-emerald-500 text-white rounded-lg">Resend</button>
+                          <button onClick={() => setEditingMessageId(null)} className="text-[10px] font-bold uppercase px-2 py-1 rounded opacity-60">Cancel</button>
+                          <button onClick={() => { setMessages(p => p.slice(0, i)); handleSend(editInput); setEditingMessageId(null); }}
+                            className="text-[10px] font-bold uppercase px-3 py-1 bg-emerald-500 text-white rounded-lg">Send</button>
                         </div>
                       </div>
                     ) : msg.role === 'assistant' ? (
                       <TypewriterMessage content={msg.content} isNew={msg.id === latestAiId} />
-                    ) : (
-                      <p>{msg.content}</p>
-                    )}
+                    ) : <p>{msg.content}</p>}
                   </div>
-                  <div className={cn("flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-widest", bgImage ? "text-white/40" : "text-gray-400")}>
+                  <div className={cn("flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-widest", bg ? "text-white/40" : "text-gray-400")}>
                     <span>{format(msg.timestamp, 'HH:mm')}</span>
-                    <button onClick={() => copyToClipboard(msg.content, msg.id)} className="hover:text-emerald-500 transition-colors">
-                      {copiedId === msg.id ? <Check size={10} /> : <Copy size={10} />}
+                    <button onClick={() => copy(msg.content, msg.id)} className="hover:text-emerald-500 transition-colors">
+                      {copiedId === msg.id ? <Check size={9} /> : <Copy size={9} />}
                     </button>
                     {msg.role === 'assistant' && i > 0 && (
                       <>
                         <button onClick={() => speak(msg.content, msg.id)}
-                          className={cn("hover:text-emerald-400 transition-colors flex items-center gap-1", isSpeaking === msg.id && "text-emerald-400")}>
-                          {isGeneratingVoice === msg.id ? <Loader2 size={10} className="animate-spin" /> : isSpeaking === msg.id ? <X size={10} /> : <Volume2 size={10} />}
+                          className={cn("flex items-center gap-1 hover:text-emerald-400 transition-colors", isSpeaking === msg.id && "text-emerald-400")}>
+                          {isGeneratingVoice === msg.id ? <Loader2 size={9} className="animate-spin" /> : isSpeaking === msg.id ? <X size={9} /> : <Volume2 size={9} />}
                           {isGeneratingVoice === msg.id && <span>loading...</span>}
                         </button>
-                        <button onClick={() => { setMessages(prev => [...prev.slice(0, i)]); handleSend(messages[i-1]?.content); }}
-                          className="hover:text-emerald-400 transition-colors"><RotateCcw size={10} /></button>
+                        <button onClick={() => { setMessages(p => p.slice(0, i)); handleSend(messages[i-1]?.content); }} className="hover:text-emerald-400 transition-colors"><RotateCcw size={9} /></button>
                       </>
                     )}
                     {msg.role === 'user' && !editingMessageId && (
-                      <button onClick={() => { setEditingMessageId(msg.id); setEditInput(msg.content); }} className="hover:text-emerald-400 transition-colors"><Edit2 size={10} /></button>
+                      <button onClick={() => { setEditingMessageId(msg.id); setEditInput(msg.content); }} className="hover:text-emerald-400 transition-colors"><Edit2 size={9} /></button>
                     )}
                   </div>
                 </div>
@@ -396,44 +489,44 @@ RULES:
           ))}
           {isLoading && (
             <div className="flex justify-start">
-              <div className={cn("px-4 py-3 rounded-2xl rounded-tl-sm border flex items-center gap-1.5",
-                bgImage ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
-                {[0, 0.15, 0.3].map((d, i) => <div key={i} className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />)}
+              <div className={cn("px-4 py-3 rounded-2xl rounded-tl-sm border flex gap-1.5 items-center",
+                bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
+                {[0,.15,.3].map((d,i) => <div key={i} className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />)}
               </div>
             </div>
           )}
         </div>
 
         {/* Input */}
-        <div className={cn("p-3 md:p-4 border-t transition-colors relative z-10",
-          bgImage ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
+        <div className={cn("p-3 border-t z-10 relative",
+          bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
           {!aiSettings.apiKey && (
             <div className="mb-2 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <Info size={14} /><p className="text-xs font-medium">Add your Gemini API Key in Settings to enable AI.</p>
+              <Info size={13} /><p className="text-xs">Add Gemini API Key in Settings.</p>
             </div>
           )}
           {attachedFile && (
             <div className="mb-2 p-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-2"><Paperclip size={13} className="text-emerald-500" /><span className="text-xs font-bold text-emerald-600 truncate max-w-[180px]">{attachedFile.name}</span></div>
-              <button onClick={() => setAttachedFile(null)} className="text-emerald-400 hover:text-emerald-600"><X size={14} /></button>
+              <div className="flex items-center gap-2"><Paperclip size={12} className="text-emerald-500" /><span className="text-xs font-bold text-emerald-600 truncate max-w-[180px]">{attachedFile.name}</span></div>
+              <button onClick={() => setAttachedFile(null)}><X size={13} className="text-emerald-400" /></button>
             </div>
           )}
           <div className="relative">
             <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               placeholder={`Message ${aiSettings.name}...`} rows={1}
-              className={cn("w-full min-h-[48px] max-h-[160px] py-3 pl-4 pr-24 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm resize-none overflow-y-auto transition-all border",
-                bgImage ? "bg-white/10 border-white/20 text-white placeholder-white/40 backdrop-blur-sm" : "bg-gray-50 dark:bg-white/5 border-black/5 dark:border-white/5")} />
+              className={cn("w-full min-h-[48px] max-h-[160px] py-3 pl-4 pr-24 rounded-2xl outline-none text-sm resize-none overflow-y-auto border focus:ring-2 focus:ring-emerald-500 transition-all",
+                bg ? "bg-white/10 border-white/20 text-white placeholder-white/40" : "bg-gray-50 dark:bg-white/5 border-black/5 dark:border-white/5")} />
             <div className="absolute right-2 bottom-2 flex items-center gap-1">
               <input type="file" ref={fileInputRef} onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => setAttachedFile({ name: f.name, content: ev.target?.result as string }); r.readAsText(f); }} className="hidden" accept=".txt,.js,.ts,.tsx,.json,.md" />
-              <button onClick={() => fileInputRef.current?.click()} className={cn("p-1.5 transition-colors", bgImage ? "text-white/50 hover:text-white" : "text-gray-400 hover:text-emerald-500")}><Paperclip size={17} /></button>
+              <button onClick={() => fileInputRef.current?.click()} className={cn("p-1.5 transition-colors", bg ? "text-white/50 hover:text-white" : "text-gray-400 hover:text-emerald-500")}><Paperclip size={16} /></button>
               <button onClick={() => { if (isListening) { recognitionRef.current?.stop(); } else { try { recognitionRef.current?.start(); setIsListening(true); } catch {} } }}
-                className={cn("p-1.5 rounded-xl transition-all", isListening ? "bg-red-500 text-white animate-pulse" : cn(bgImage ? "text-white/50 hover:text-white" : "text-gray-400 hover:text-emerald-500"))}>
-                <Mic size={17} />
+                className={cn("p-1.5 rounded-xl transition-all", isListening ? "bg-red-500 text-white animate-pulse" : cn(bg ? "text-white/50 hover:text-white" : "text-gray-400 hover:text-emerald-500"))}>
+                <Mic size={16} />
               </button>
               <button onClick={() => handleSend()} disabled={(!input.trim() && !attachedFile) || !aiSettings.apiKey || isLoading}
-                className="p-1.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-40 transition-all shadow-lg shadow-emerald-500/20">
-                <Send size={17} />
+                className="p-1.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-40 shadow-lg shadow-emerald-500/20 transition-all">
+                <Send size={16} />
               </button>
             </div>
           </div>
@@ -444,28 +537,28 @@ RULES:
       <AnimatePresence>
         {showMemory && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMemory(false)} className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMemory(false)} className="fixed inset-0 bg-black/60 z-40 lg:hidden" />
             <motion.div key="mem" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               className="fixed lg:relative inset-y-0 right-0 w-full sm:w-80 bg-white dark:bg-[#141414] border-l border-black/5 dark:border-white/5 flex flex-col z-50">
               <header className="p-4 border-b border-black/5 dark:border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-2"><Brain className="text-emerald-500" size={18} /><h3 className="font-bold">AI Memory</h3></div>
+                <div className="flex items-center gap-2"><Brain className="text-emerald-500" size={17} /><h3 className="font-bold text-sm">AI Memory</h3></div>
                 <div className="flex gap-1">
-                  <button onClick={() => addMemory("New memory...")} className="p-1.5 bg-gray-100 dark:bg-white/5 rounded-lg"><Plus size={16} /></button>
-                  <button onClick={() => setShowMemory(false)} className="p-1.5 lg:hidden bg-gray-100 dark:bg-white/5 rounded-lg"><X size={16} /></button>
+                  <button onClick={() => addMemory('New memory...')} className="p-1.5 bg-gray-100 dark:bg-white/5 rounded-lg"><Plus size={15} /></button>
+                  <button onClick={() => setShowMemory(false)} className="p-1.5 lg:hidden bg-gray-100 dark:bg-white/5 rounded-lg"><X size={15} /></button>
                 </div>
               </header>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {aiMemory.length === 0 ? (
-                  <div className="text-center py-16 opacity-30"><Brain size={40} className="mx-auto mb-3" /><p className="text-sm font-bold">No memories yet</p></div>
-                ) : aiMemory.map(m => (
-                  <div key={m.id} className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 group">
-                    <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{m.content}</p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{format(new Date(m.date), 'MMM d')} · {m.type}</span>
-                      <button onClick={() => deleteMemory(m.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all"><Trash2 size={12} /></button>
+                {aiMemory.length === 0
+                  ? <div className="text-center py-16 opacity-30"><Brain size={36} className="mx-auto mb-3" /><p className="text-sm font-bold">No memories yet</p></div>
+                  : aiMemory.map(m => (
+                    <div key={m.id} className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 group">
+                      <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">{m.content}</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{format(new Date(m.date), 'MMM d')} · {m.type}</span>
+                        <button onClick={() => deleteMemory(m.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all"><Trash2 size={11} /></button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </motion.div>
           </>

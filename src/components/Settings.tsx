@@ -34,10 +34,9 @@ export const Settings: React.FC = () => {
     { id: 'Girlfriend', name: 'Girlfriend', locked: false },
   ];
   const models = [
-    { id: 'gemini-1.5-flash-8b', name: 'Gemini Flash 8B', speed: 'Fastest', desc: 'Lightest, lowest quota, quick chats', locked: false },
-    { id: 'gemini-1.5-flash', name: 'Gemini Flash Stable', speed: 'Stable', desc: 'Reliable default, recommended', locked: false },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', speed: 'Fast', desc: 'Newer, smarter, higher usage', locked: false },
-    { id: 'gemini-2.5-flash-preview-04-17', name: 'Gemini 2.5 Flash', speed: 'Latest', desc: 'Most advanced, best reasoning', locked: false },
+    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', speed: 'Fastest', desc: 'Lowest quota, best for quick chats', locked: false },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', speed: 'Balanced', desc: 'Fast and smart, recommended default', locked: false },
+    { id: 'gemini-2.5-pro-preview-03-25', name: 'Gemini 2.5 Pro', speed: 'Smartest', desc: 'Most powerful, uses more quota', locked: false },
   ];
   const voices = ['Puck', 'Kore', 'Zephyr'];
 
