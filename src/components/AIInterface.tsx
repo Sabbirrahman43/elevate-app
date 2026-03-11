@@ -38,9 +38,9 @@ const GEMINI_MODELS = [
 ];
 
 const GROQ_MODELS = [
-  { id: 'llama-3.1-8b-instant', name: 'Llama 8B', desc: 'Fastest · Ultra low latency' },
-  { id: 'llama-3.1-70b-versatile', name: 'Llama 70B', desc: 'Balanced · Recommended' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B v3.3', desc: 'Smartest · Best quality' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B', desc: 'Fast · Best balance' },
+  { id: 'llama-3.3-70b-specdec', name: 'Llama 70B Spec', desc: 'Smartest · Highest quality' },
+  { id: 'gemma2-9b-it', name: 'Gemma 9B', desc: 'Fastest · Use when 70B hits limit' },
 ];
 
 const VOICE_LENGTHS = [
@@ -62,6 +62,9 @@ export const AIInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [showImagePrompt, setShowImagePrompt] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState('');
   const [showMemory, setShowMemory] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState<string | null>(null);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState<string | null>(null);
@@ -181,6 +184,16 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
     const activeKey = aiSettings.provider === 'groq' ? aiSettings.groqApiKey : aiSettings.apiKey;
     if (!text.trim() && !attachedFile) return;
     if (!activeKey) return;
+
+    // Auto-detect image generation request
+    const imageKeywords = /^(generate|create|draw|make|show|paint|design)\s+(an?\s+)?(image|photo|picture|illustration|art|drawing|painting|portrait)\s+(of\s+)?/i;
+    const isImageRequest = imageKeywords.test(text.trim());
+    if (isImageRequest && aiSettings.apiKey) {
+      const prompt = text.trim().replace(imageKeywords, '').trim() || text.trim();
+      generateImage(prompt);
+      setInput('');
+      return;
+    }
     let msgs = [...messages];
     if (fromIndex !== undefined) msgs = msgs.slice(0, fromIndex);
     const content = attachedFile ? `[File: ${attachedFile.name}]\n${attachedFile.content}\n\nUser: ${text}` : text;
@@ -192,14 +205,25 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
       let aiText = '';
 
       if (aiSettings.provider === 'groq') {
-        // Groq API — OpenAI compatible
+        const today = format(new Date(), 'yyyy-MM-dd');
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiSettings.groqApiKey}` },
           body: JSON.stringify({
-            model: aiSettings.groqModel || 'llama-3.1-70b-versatile',
+            model: aiSettings.groqModel || 'llama-3.3-70b-versatile',
             messages: [
-              { role: 'system', content: generateSystem() },
+              { role: 'system', content: generateSystem() + `
+
+TASK & HABIT MANAGEMENT — VERY IMPORTANT:
+When managing tasks or habits, ALWAYS include an <action> tag in your response.
+
+Examples:
+"add task go gym today" → respond naturally + <action>{"type":"addTask","name":"go gym","date":"${today}"}</action>
+"add habit meditation" → respond naturally + <action>{"type":"addHabit","name":"meditation","category":"Mind","icon":"🧘"}</action>
+"delete habit [id]" → respond naturally + <action>{"type":"deleteHabit","id":"HABIT_ID"}</action>
+"mark task done [id]" → respond naturally + <action>{"type":"toggleTask","id":"TASK_ID"}</action>
+
+Always respond in character first, then add the action tag at the very end.` },
               ...updated.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
             ],
             max_tokens: 1024,
@@ -211,7 +235,22 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
           throw new Error(err.error?.message || `Groq error ${groqRes.status}`);
         }
         const groqData = await groqRes.json();
-        aiText = groqData.choices?.[0]?.message?.content || "I couldn't process that.";
+        const rawText = groqData.choices?.[0]?.message?.content || "I couldn't process that.";
+        // Parse action blocks with improved regex
+        const actionRegex = /<action>([\s\S]*?)<\/action>/g;
+        let actionMatch;
+        while ((actionMatch = actionRegex.exec(rawText)) !== null) {
+          try {
+            const action = JSON.parse(actionMatch[1].trim());
+            if (action.type === 'addTask') addTask(action.name, action.date || today);
+            else if (action.type === 'deleteTask') deleteTask(action.id);
+            else if (action.type === 'toggleTask') toggleTask(action.id);
+            else if (action.type === 'addHabit') addHabit(action.name, action.category || 'General', action.icon || '✨');
+            else if (action.type === 'deleteHabit') deleteHabit(action.id);
+            else if (action.type === 'toggleHabitLog') toggleHabitLog(action.id, action.date || today);
+          } catch (e) { console.error('Groq action parse failed:', e); }
+        }
+        aiText = rawText.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
       } else {
         // Gemini API
         const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
@@ -308,6 +347,44 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
 
   const copy = async (text: string, id: string) => {
     try { await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(() => setCopiedId(null), 2000); } catch {}
+  };
+
+  const generateImage = async (prompt: string) => {
+    if (!aiSettings.apiKey) return;
+    setIsGeneratingImage(true);
+    // Add user message
+    const userMsg: Message = { id: `u-img-${Date.now()}`, role: 'user', content: `🎨 Generate image: ${prompt}`, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+    setImagePrompt('');
+    setShowImagePrompt(false);
+    try {
+      const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
+      const res = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-preview-image-generation',
+        contents: [{ parts: [{ text: prompt }] }],
+        config: { responseModalities: ['TEXT', 'IMAGE'] as any }
+      });
+      let imageData = '';
+      let caption = '';
+      for (const part of res.candidates?.[0]?.content?.parts || []) {
+        if ((part as any).inlineData) imageData = (part as any).inlineData.data;
+        if ((part as any).text) caption = (part as any).text;
+      }
+      if (imageData) {
+        const imgMsg: Message = {
+          id: `a-img-${Date.now()}`, role: 'assistant',
+          content: `![generated](data:image/png;base64,${imageData})${caption ? `\n\n${caption}` : ''}`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, imgMsg]);
+      } else {
+        setMessages(prev => [...prev, { id: `a-img-err-${Date.now()}`, role: 'assistant', content: '⚠️ Image generation failed. Make sure you have access to Gemini image generation.', timestamp: new Date() }]);
+      }
+    } catch (err: any) {
+      setMessages(prev => [...prev, { id: `a-img-err-${Date.now()}`, role: 'assistant', content: `⚠️ ${err.message || 'Image generation failed.'}`, timestamp: new Date() }]);
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -550,6 +627,20 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
                             className="text-[10px] font-bold uppercase px-3 py-1 bg-emerald-500 text-white rounded-lg">Send</button>
                         </div>
                       </div>
+                    ) : msg.role === 'assistant' && msg.content.startsWith('![generated]') ? (
+                      // Image message
+                      <div className="space-y-2">
+                        <img src={msg.content.match(/!\[generated\]\((.*?)\)/)?.[1]} alt="Generated"
+                          className="rounded-xl max-w-full w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => {
+                            const src = msg.content.match(/!\[generated\]\((.*?)\)/)?.[1];
+                            if (src) { const a = document.createElement('a'); a.href = src; a.download = 'elevate-image.png'; a.click(); }
+                          }} />
+                        {msg.content.split('\n\n')[1] && (
+                          <p className="text-xs opacity-70">{msg.content.split('\n\n')[1]}</p>
+                        )}
+                        <p className="text-[9px] opacity-40">Click to download</p>
+                      </div>
                     ) : msg.role === 'assistant' ? (
                       <TypewriterMessage content={msg.content} isNew={msg.id === latestAiId} />
                     ) : <p>{msg.content}</p>}
@@ -582,6 +673,15 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
               <div className={cn("px-4 py-3 rounded-2xl rounded-tl-sm border flex gap-1.5 items-center",
                 bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
                 {[0,.15,.3].map((d,i) => <div key={i} className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />)}
+              </div>
+            </div>
+          )}
+          {isGeneratingImage && (
+            <div className="flex justify-start">
+              <div className={cn("px-4 py-3 rounded-2xl rounded-tl-sm border flex gap-2 items-center",
+                bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
+                <Loader2 size={16} className="animate-spin text-purple-500" />
+                <span className="text-xs text-gray-400">Generating image...</span>
               </div>
             </div>
           )}
