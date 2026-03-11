@@ -38,9 +38,9 @@ const GEMINI_MODELS = [
 ];
 
 const GROQ_MODELS = [
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B', desc: 'Fast · Best balance' },
-  { id: 'llama-3.3-70b-specdec', name: 'Llama 70B Spec', desc: 'Smartest · Highest quality' },
-  { id: 'gemma2-9b-it', name: 'Gemma 9B', desc: 'Fastest · Use when 70B hits limit' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B', desc: 'Recommended · Best balance' },
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', desc: 'Newest · Vision capable' },
+  { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', desc: 'Smartest · Highest quality' },
 ];
 
 const VOICE_LENGTHS = [
