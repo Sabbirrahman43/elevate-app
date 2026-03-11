@@ -31,10 +31,16 @@ const TypewriterMessage = ({ content, isNew }: { content: string; isNew: boolean
   );
 };
 
-const MODELS = [
+const GEMINI_MODELS = [
   { id: 'gemini-2.5-flash-lite', name: 'Flash Lite', desc: 'Fastest · Lowest quota' },
   { id: 'gemini-2.5-flash', name: 'Flash 2.5', desc: 'Balanced · Recommended' },
   { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Smartest · High quota' },
+];
+
+const GROQ_MODELS = [
+  { id: 'llama-3.1-8b-instant', name: 'Llama 8B', desc: 'Fastest · Ultra low latency' },
+  { id: 'llama-3.1-70b-versatile', name: 'Llama 70B', desc: 'Balanced · Recommended' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B v3.3', desc: 'Smartest · Best quality' },
 ];
 
 const VOICE_LENGTHS = [
@@ -172,8 +178,9 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
 
   const handleSend = async (overrideInput?: string, fromIndex?: number) => {
     const text = overrideInput || input;
+    const activeKey = aiSettings.provider === 'groq' ? aiSettings.groqApiKey : aiSettings.apiKey;
     if (!text.trim() && !attachedFile) return;
-    if (!aiSettings.apiKey) return;
+    if (!activeKey) return;
     let msgs = [...messages];
     if (fromIndex !== undefined) msgs = msgs.slice(0, fromIndex);
     const content = attachedFile ? `[File: ${attachedFile.name}]\n${attachedFile.content}\n\nUser: ${text}` : text;
@@ -182,32 +189,58 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
     setMessages(updated);
     setInput(''); setAttachedFile(null); setEditingMessageId(null); setIsLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
-      const tools: FunctionDeclaration[] = [
-        { name: "addTask", description: "Add task", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["name","date"] } },
-        { name: "deleteTask", description: "Delete task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
-        { name: "toggleTask", description: "Toggle task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
-        { name: "addHabit", description: "Add habit", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, category: { type: Type.STRING }, icon: { type: Type.STRING } }, required: ["name","category","icon"] } },
-        { name: "deleteHabit", description: "Delete habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
-        { name: "toggleHabitLog", description: "Log habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id","date"] } },
-      ];
-      const res = await ai.models.generateContent({
-        model: aiSettings.model || 'gemini-2.5-flash',
-        contents: updated.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-        config: { systemInstruction: generateSystem(), tools: [{ functionDeclarations: tools }] }
-      });
-      const calls = res.functionCalls;
-      if (calls) {
-        for (const c of calls) {
-          if (c.name === 'addTask') addTask(c.args.name as string, c.args.date as string);
-          if (c.name === 'deleteTask') deleteTask(c.args.id as string);
-          if (c.name === 'toggleTask') toggleTask(c.args.id as string);
-          if (c.name === 'addHabit') addHabit(c.args.name as string, c.args.category as string, c.args.icon as string);
-          if (c.name === 'deleteHabit') deleteHabit(c.args.id as string);
-          if (c.name === 'toggleHabitLog') toggleHabitLog(c.args.id as string, c.args.date as string);
+      let aiText = '';
+
+      if (aiSettings.provider === 'groq') {
+        // Groq API — OpenAI compatible
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiSettings.groqApiKey}` },
+          body: JSON.stringify({
+            model: aiSettings.groqModel || 'llama-3.1-70b-versatile',
+            messages: [
+              { role: 'system', content: generateSystem() },
+              ...updated.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+            ],
+            max_tokens: 1024,
+            temperature: 0.7,
+          })
+        });
+        if (!groqRes.ok) {
+          const err = await groqRes.json();
+          throw new Error(err.error?.message || `Groq error ${groqRes.status}`);
         }
+        const groqData = await groqRes.json();
+        aiText = groqData.choices?.[0]?.message?.content || "I couldn't process that.";
+      } else {
+        // Gemini API
+        const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
+        const tools: FunctionDeclaration[] = [
+          { name: "addTask", description: "Add task", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["name","date"] } },
+          { name: "deleteTask", description: "Delete task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
+          { name: "toggleTask", description: "Toggle task", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
+          { name: "addHabit", description: "Add habit", parameters: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, category: { type: Type.STRING }, icon: { type: Type.STRING } }, required: ["name","category","icon"] } },
+          { name: "deleteHabit", description: "Delete habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
+          { name: "toggleHabitLog", description: "Log habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id","date"] } },
+        ];
+        const res = await ai.models.generateContent({
+          model: aiSettings.model || 'gemini-2.5-flash',
+          contents: updated.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+          config: { systemInstruction: generateSystem(), tools: [{ functionDeclarations: tools }] }
+        });
+        const calls = res.functionCalls;
+        if (calls) {
+          for (const c of calls) {
+            if (c.name === 'addTask') addTask(c.args.name as string, c.args.date as string);
+            if (c.name === 'deleteTask') deleteTask(c.args.id as string);
+            if (c.name === 'toggleTask') toggleTask(c.args.id as string);
+            if (c.name === 'addHabit') addHabit(c.args.name as string, c.args.category as string, c.args.icon as string);
+            if (c.name === 'deleteHabit') deleteHabit(c.args.id as string);
+            if (c.name === 'toggleHabitLog') toggleHabitLog(c.args.id as string, c.args.date as string);
+          }
+        }
+        aiText = res.text || (calls ? 'Done ✅' : "Couldn't process that.");
       }
-      const aiText = res.text || (calls ? 'Done ✅' : "Couldn't process that.");
       const newId = `a-${Date.now()}`;
       setMessages(prev => [...prev, { id: newId, role: 'assistant', content: aiText, timestamp: new Date() }]);
       setLatestAiId(newId);
@@ -302,7 +335,8 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
   };
 
   const removeBg = () => { setBg(null); localStorage.removeItem('elevate_ai_bg'); localStorage.removeItem('elevate_ai_bg_type'); };
-  const currentModel = MODELS.find(m => m.id === aiSettings.model) || MODELS[1];
+  const MODELS = aiSettings.provider === 'groq' ? GROQ_MODELS : GEMINI_MODELS;
+  const currentModel = MODELS.find(m => m.id === (aiSettings.provider === 'groq' ? aiSettings.groqModel : aiSettings.model)) || MODELS[1];
   const currentVl = VOICE_LENGTHS.find(v => v.id === voiceLength) || VOICE_LENGTHS[1];
 
   return (
@@ -375,20 +409,44 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
               <p className={cn("font-bold text-xs truncate", bg && "text-white")}>{aiSettings.name}</p>
               <button onClick={() => setShowModelMenu(!showModelMenu)}
                 className="flex items-center gap-1 text-[9px] font-bold text-emerald-500 uppercase tracking-widest hover:text-emerald-400">
-                <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />{currentModel.name} ▾
+                <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
+                {aiSettings.provider === 'groq' ? '⚡' : '✦'} {currentModel.name} ▾
               </button>
               <AnimatePresence>
                 {showModelMenu && (
                   <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-                    {MODELS.map(m => (
-                      <button key={m.id} onClick={() => { updateAISettings({ model: m.id }); setShowModelMenu(false); }}
-                        className={cn("w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0",
-                          aiSettings.model === m.id && "bg-emerald-50 dark:bg-emerald-500/10")}>
-                        <p className={cn("text-xs font-bold", aiSettings.model === m.id ? "text-emerald-600 dark:text-emerald-400" : "text-gray-800 dark:text-gray-200")}>{m.name}</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5">{m.desc}</p>
+                    className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                    {/* Provider switcher */}
+                    <div className="flex p-1 gap-1 border-b border-black/5 dark:border-white/5">
+                      <button onClick={() => updateAISettings({ provider: 'gemini' })}
+                        className={cn("flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all",
+                          aiSettings.provider === 'gemini' ? "bg-emerald-500 text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300")}>
+                        ✦ Gemini
                       </button>
-                    ))}
+                      <button onClick={() => updateAISettings({ provider: 'groq' })}
+                        className={cn("flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all",
+                          aiSettings.provider === 'groq' ? "bg-emerald-500 text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300")}>
+                        ⚡ Groq
+                      </button>
+                    </div>
+                    {/* Models for selected provider */}
+                    {MODELS.map(m => {
+                      const isActive = aiSettings.provider === 'groq'
+                        ? aiSettings.groqModel === m.id
+                        : aiSettings.model === m.id;
+                      return (
+                        <button key={m.id} onClick={() => {
+                          if (aiSettings.provider === 'groq') updateAISettings({ groqModel: m.id });
+                          else updateAISettings({ model: m.id });
+                          setShowModelMenu(false);
+                        }}
+                          className={cn("w-full text-left px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-black/5 dark:border-white/5 last:border-0",
+                            isActive && "bg-emerald-50 dark:bg-emerald-500/10")}>
+                          <p className={cn("text-xs font-bold", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-gray-800 dark:text-gray-200")}>{m.name}</p>
+                          <p className="text-[9px] text-gray-400 mt-0.5">{m.desc}</p>
+                        </button>
+                      );
+                    })}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -532,9 +590,9 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
         {/* Input */}
         <div className={cn("p-3 border-t z-10 relative",
           bg ? "bg-black/40 border-white/10 backdrop-blur-md" : "bg-white dark:bg-[#141414] border-black/5 dark:border-white/5")}>
-          {!aiSettings.apiKey && (
+          {!(aiSettings.provider === 'groq' ? aiSettings.groqApiKey : aiSettings.apiKey) && (
             <div className="mb-2 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center gap-2 text-amber-700 dark:text-amber-400">
-              <Info size={13} /><p className="text-xs">Add Gemini API Key in Settings.</p>
+              <Info size={13} /><p className="text-xs font-medium">Add your {aiSettings.provider === 'groq' ? 'Groq' : 'Gemini'} API Key in Settings.</p>
             </div>
           )}
           {attachedFile && (
@@ -556,7 +614,7 @@ Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay c
                 className={cn("p-1.5 rounded-xl transition-all", isListening ? "bg-red-500 text-white animate-pulse" : cn(bg ? "text-white/50 hover:text-white" : "text-gray-400 hover:text-emerald-500"))}>
                 <Mic size={16} />
               </button>
-              <button onClick={() => handleSend()} disabled={(!input.trim() && !attachedFile) || !aiSettings.apiKey || isLoading}
+              <button onClick={() => handleSend()} disabled={(!input.trim() && !attachedFile) || !(aiSettings.provider === 'groq' ? aiSettings.groqApiKey : aiSettings.apiKey) || isLoading}
                 className="p-1.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-40 shadow-lg shadow-emerald-500/20 transition-all">
                 <Send size={16} />
               </button>

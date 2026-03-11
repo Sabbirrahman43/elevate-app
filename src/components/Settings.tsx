@@ -109,14 +109,17 @@ export const Settings: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Gemini API Key</label>
-                <input
-                  type="password"
-                  value={aiSettings.apiKey || ''}
-                  onChange={(e) => updateAISettings({ apiKey: e.target.value })}
+                <input type="password" value={aiSettings.apiKey || ''} onChange={(e) => updateAISettings({ apiKey: e.target.value })}
                   placeholder="Enter your Google Gemini API Key"
-                  className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all"
-                />
-                <p className="mt-2 text-[10px] text-gray-400">Your key is stored locally in your browser. Never share it.</p>
+                  className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
+                <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">aistudio.google.com</span></p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Groq API Key ⚡</label>
+                <input type="password" value={aiSettings.groqApiKey || ''} onChange={(e) => updateAISettings({ groqApiKey: e.target.value })}
+                  placeholder="Enter your Groq API Key"
+                  className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
+                <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">console.groq.com</span> — faster responses, free tier</p>
               </div>
             </div>
           </section>

@@ -11,184 +11,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { eachDayOfInterval, startOfYear, endOfYear } from 'date-fns';
 
 // Ninja shadow fight background animation
-const NinjaBackground: React.FC = () => {
-  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-
-  React.useEffect(() => {
-    const canvas = document.getElementById('ninja-bg') as HTMLCanvasElement;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    let W = 0, H = 0, ground = 0, animId = 0;
-
-    function resize() {
-      W = canvas.width = window.innerWidth;
-      H = canvas.height = window.innerHeight;
-      ground = H * 0.78;
-    }
-    resize();
-    window.addEventListener('resize', resize);
-
-    const particles: any[] = [];
-    function spawnParticles(x: number, y: number, color: string, count = 6) {
-      for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const s = 2 + Math.random() * 4;
-        particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 2, life: 1, decay: 0.04 + Math.random()*0.04, size: 2 + Math.random()*3, color });
-      }
-    }
-
-    function drawFighter(x: number, y: number, facingRight: boolean, state: string, frame: number, headbandColor: string) {
-      ctx.save();
-      ctx.translate(x, y);
-      if (!facingRight) ctx.scale(-1, 1);
-
-      const shadow = 'rgba(30,30,30,0.95)';
-      ctx.strokeStyle = shadow; ctx.fillStyle = shadow;
-      ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 8;
-
-      const t = frame * 0.12;
-      let fLeg = 0.2, bLeg = -0.2, fArm = -0.3, bArm = 0.4, lean = 0, kb = 0;
-
-      if (state === 'run') {
-        const s = Math.sin(t * 2);
-        fLeg = s * 0.65; bLeg = -s * 0.65;
-        fArm = -s * 0.5; bArm = s * 0.5;
-        lean = 0.18; kb = Math.abs(s) * 0.4;
-      } else if (state === 'attack1') { fArm = -1.5; bArm = 0.7; fLeg = 0.3; lean = 0.3; }
-      else if (state === 'attack2') { fLeg = -1.3; bLeg = -0.1; fArm = -0.8; lean = 0.2; }
-      else if (state === 'attack3') { fArm = -1.8 + Math.sin(t*4)*0.4; bArm = 1.2; lean = 0.35; }
-      else if (state === 'jump') { fLeg = -0.5; bLeg = 0.5; fArm = -1.0; bArm = -0.4; kb = 0.5; }
-      else if (state === 'idle') { lean = Math.sin(t * 0.5) * 0.04; }
-
-      const hR = 13, bodyH = 34, legH = 38, armL = 26;
-      const shY = -bodyH - hR*2 + 4, hipY = -legH + 4;
-
-      // Back limbs (darker)
-      ctx.globalAlpha = 0.45;
-      // Back leg
-      ctx.beginPath(); ctx.moveTo(0, hipY);
-      const bkx = Math.sin(bLeg)*legH*0.5, bky = hipY + Math.cos(Math.abs(bLeg))*legH*0.5 + kb*10;
-      ctx.lineTo(bkx, bky); ctx.lineTo(bkx + Math.sin(bLeg+kb)*legH*0.45, bky + legH*0.5); ctx.stroke();
-      // Back arm
-      ctx.beginPath(); ctx.moveTo(0, shY);
-      const baex = Math.sin(bArm)*armL*0.5, baey = shY + Math.cos(Math.abs(bArm))*armL*0.5;
-      ctx.lineTo(baex, baey); ctx.lineTo(baex + Math.sin(bArm*0.7)*armL*0.5, baey + armL*0.45); ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Body
-      const bx = Math.sin(lean)*5;
-      ctx.beginPath(); ctx.moveTo(0, hipY); ctx.lineTo(bx, shY); ctx.stroke();
-      // Head
-      ctx.beginPath(); ctx.arc(bx, shY - hR, hR, 0, Math.PI*2); ctx.fill();
-      // Headband
-      ctx.beginPath(); ctx.arc(bx, shY - hR, hR + 1, Math.PI*0.75, Math.PI*0.25);
-      ctx.strokeStyle = headbandColor; ctx.lineWidth = 3.5;
-      ctx.shadowColor = headbandColor; ctx.shadowBlur = 12;
-      ctx.stroke();
-      ctx.strokeStyle = shadow; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 8; ctx.lineWidth = 3.5;
-
-      // Front leg
-      ctx.beginPath(); ctx.moveTo(0, hipY);
-      const fkx = Math.sin(fLeg)*legH*0.5, fky = hipY + Math.cos(Math.abs(fLeg))*legH*0.5 + kb*8;
-      ctx.lineTo(fkx, fky); ctx.lineTo(fkx + Math.sin(fLeg+kb*0.5)*legH*0.45, fky + legH*0.5); ctx.stroke();
-
-      // Front arm
-      ctx.beginPath(); ctx.moveTo(bx, shY);
-      const faex = bx + Math.sin(fArm)*armL*0.5, faey = shY + Math.cos(Math.abs(fArm))*armL*0.5;
-      ctx.lineTo(faex, faey);
-      const fahx = faex + Math.sin(fArm*0.8)*armL*0.5, fahy = faey + armL*0.5;
-      ctx.lineTo(fahx, fahy); ctx.stroke();
-
-      // Sword on attack
-      if (state.startsWith('attack') || state === 'run') {
-        const sa = fArm - 0.3;
-        ctx.beginPath(); ctx.moveTo(fahx, fahy);
-        ctx.lineTo(fahx + Math.sin(sa)*42, fahy - Math.cos(sa)*18);
-        ctx.strokeStyle = headbandColor.replace('0.9', '0.7');
-        ctx.shadowColor = headbandColor; ctx.shadowBlur = 18; ctx.lineWidth = 2;
-        ctx.stroke();
-        // Trail
-        if (state === 'attack1' || state === 'attack3') {
-          ctx.beginPath(); ctx.moveTo(fahx, fahy);
-          ctx.lineTo(fahx + Math.sin(sa+0.5)*34, fahy - Math.cos(sa+0.5)*14);
-          ctx.strokeStyle = headbandColor.replace('0.9', '0.15');
-          ctx.lineWidth = 9; ctx.stroke();
-        }
-      }
-      ctx.restore();
-    }
-
-    // Simple fighter AI
-    type FState = { x: number; y: number; vy: number; state: string; timer: number; frame: number; isLeft: boolean; headband: string; };
-
-    const fighters: FState[] = [
-      { x: W * 0.3, y: ground, vy: 0, state: 'idle', timer: 60, frame: 0, isLeft: true, headband: 'rgba(100,180,255,0.9)' },
-      { x: W * 0.7, y: ground, vy: 0, state: 'idle', timer: 80, frame: 0, isLeft: false, headband: 'rgba(255,80,80,0.9)' }
-    ];
-
-    function updateFighter(f: FState, opp: FState) {
-      f.frame++;
-      f.timer--;
-      if (f.y < ground) { f.vy += 1.1; f.y += f.vy; if (f.y >= ground) { f.y = ground; f.vy = 0; if (f.state === 'jump') f.state = 'idle'; } }
-      if (f.timer > 0) return;
-      const dist = Math.abs(f.x - opp.x);
-      const r = Math.random();
-      if (dist < 140) {
-        if (r < 0.45) { f.state = 'attack1'; f.timer = 24; spawnParticles((f.x+opp.x)/2, ground-65, f.headband, 5); }
-        else if (r < 0.75) { f.state = 'attack2'; f.timer = 28; }
-        else { f.state = 'attack3'; f.timer = 30; spawnParticles((f.x+opp.x)/2, ground-65, f.headband, 4); }
-      } else if (dist < 250) {
-        if (r < 0.35) { f.state = 'jump'; f.timer = 36; f.vy = -17; }
-        else { f.state = 'attack1'; f.timer = 22; }
-      } else {
-        f.state = 'run'; f.timer = 20;
-        f.x += f.isLeft ? 28 : -28;
-        f.x = Math.max(80, Math.min(W - 80, f.x));
-      }
-    }
-
-    let last = 0;
-    function loop(ts: number) {
-      ctx.clearRect(0, 0, W, H);
-
-      for (let i = 0; i < 2; i++) {
-        updateFighter(fighters[i], fighters[1-i]);
-      }
-
-      // Ground shadows
-      fighters.forEach(f => {
-        ctx.save(); ctx.globalAlpha = 0.3;
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.beginPath(); ctx.ellipse(f.x, ground + 3, 30, 7, 0, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-      });
-
-      drawFighter(fighters[0].x, fighters[0].y, true, fighters[0].state, fighters[0].frame, fighters[0].headband);
-      drawFighter(fighters[1].x, fighters[1].y, false, fighters[1].state, fighters[1].frame, fighters[1].headband);
-
-      // Particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life -= p.decay;
-        if (p.life <= 0) { particles.splice(i, 1); continue; }
-        ctx.save(); ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 6;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-      }
-
-      animId = requestAnimationFrame(loop);
-    }
-    animId = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
-  }, []);
-
-  return null;
-};
-
 export const Dashboard: React.FC = () => {
-  const { habits, tasks, userProfile, setActiveTab } = useAppContext();
+  const { habits, tasks, userProfile, setActiveTab, setChatHistory, chatHistory } = useAppContext();
   const [showWhyModal, setShowWhyModal] = useState(false);
 
   // Goal alignment score — how well do today's tasks match user goals?
@@ -270,10 +94,6 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-[#E4E3E0] relative">
-      {/* Ninja fight background canvas */}
-      <canvas id="ninja-bg" className="fixed pointer-events-none" style={{ top: 0, left: 0, width: '100%', height: '100%', opacity: 0.18, zIndex: 0 }} />
-      <NinjaBackground />
-      <div className="relative z-10">
       <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-4 pb-8">
 
         {/* Header */}
@@ -431,7 +251,19 @@ export const Dashboard: React.FC = () => {
                       <br /><br />
                       Some of today's tasks don't seem directly connected to this goal. Your AI companion can help you figure out which tasks actually move the needle.
                     </p>
-                    <button onClick={() => { setShowWhyModal(false); setActiveTab('ai'); }}
+                    <button onClick={() => {
+                      setShowWhyModal(false);
+                      const todayTasks = tasks.filter(t => t.date === format(new Date(), 'yyyy-MM-dd'));
+                      const taskNames = todayTasks.map(t => t.name).join(', ');
+                      const msg = {
+                        id: `goal-q-${Date.now()}`,
+                        role: 'user' as const,
+                        content: `My goal is: "${userProfile?.goals}". My tasks today are: ${taskNames}. My goal alignment score is ${goalAlignment}%. Can you explain which tasks don't match my goal and suggest better ones?`,
+                        timestamp: new Date().toISOString()
+                      };
+                      setChatHistory([...chatHistory, msg]);
+                      setActiveTab('ai');
+                    }}
                       className="w-full py-2.5 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-colors">
                       Ask AI → Why doesn't this match?
                     </button>
@@ -472,7 +304,6 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
 
-      </div>
       </div>
     </div>
   );

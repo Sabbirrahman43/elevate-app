@@ -10,7 +10,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export type Habit = { id: string; name: string; category: string; icon: string; logs: Record<string, boolean>; };
 export type Task = { id: string; name: string; date: string; completed: boolean; habitId?: string; };
 export type AIMemory = { id: string; date: string; content: string; type: 'auto' | 'manual'; };
-export type AISettings = { apiKey: string; name: string; persona: string; behavior: string; model: string; voice: string; avatar: string; mode: 'chat' | 'research' | 'supporter' | 'planner'; };
+export type AISettings = { apiKey: string; groqApiKey: string; provider: 'gemini' | 'groq'; name: string; persona: string; behavior: string; model: string; groqModel: string; voice: string; avatar: string; mode: 'chat' | 'research' | 'supporter' | 'planner'; };
 export type Notification = { id: string; title: string; message: string; date: string; read: boolean; };
 export type UserProfile = { id?: string; email?: string; name: string; dob: string; about: string; goals: string; instagram: string; avatar: string; messageCount: number; offDays: number[]; notifications: Notification[]; };
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; timestamp: string; };
@@ -39,7 +39,7 @@ type AppContextType = {
   forceSave: () => Promise<void>;
 };
 
-const defaultSettings: AISettings = { apiKey: '', name: 'Elevate AI', persona: 'Coach', behavior: 'Motivating and strict.', model: 'gemini-flash-latest', voice: 'Zephyr', avatar: '', mode: 'chat' };
+const defaultSettings: AISettings = { apiKey: '', groqApiKey: '', provider: 'gemini', name: 'Elevate AI', persona: 'Coach', behavior: 'Motivating and strict.', model: 'gemini-2.5-flash', groqModel: 'llama-3.1-70b-versatile', voice: 'Zephyr', avatar: '', mode: 'chat' };
 const defaultUserProfile: UserProfile = { name: 'User', dob: '', about: '', goals: '', instagram: '', avatar: '', messageCount: 0, offDays: [], notifications: [] };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
