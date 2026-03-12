@@ -7,115 +7,104 @@ import { motion, AnimatePresence } from 'motion/react';
 // Ninja fight canvas for sidebar
 const SidebarNinja: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    const W = canvas.width = 288;
-    const H = canvas.height = 120;
-    const ground = H - 18;
+    const W = canvas.width = 288, H = canvas.height = 180, G = H - 14;
+    const pts: any[] = [];
+    const boom = (x:number,y:number,c:string,n=10) => { for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=4+Math.random()*8;pts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-4,life:1,decay:0.04+Math.random()*0.04,r:2+Math.random()*4,c});} };
 
-    const particles: any[] = [];
-    function spawnP(x: number, y: number, color: string) {
-      for (let i = 0; i < 5; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const s = 1.5 + Math.random() * 3;
-        particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s-1.5, life: 1, decay: 0.06+Math.random()*0.04, size: 1.5+Math.random()*2, color });
-      }
-    }
-
-    function drawF(x: number, y: number, right: boolean, state: string, frame: number, hb: string) {
-      ctx.save();
-      ctx.translate(x, y);
-      if (!right) ctx.scale(-1, 1);
-      const t = frame * 0.15;
-      let fL=0.2, bL=-0.2, fA=-0.3, bA=0.4, lean=0, kb=0;
-      if (state==='run') { const s=Math.sin(t*2); fL=s*0.6; bL=-s*0.6; fA=-s*0.45; bA=s*0.45; lean=0.15; kb=Math.abs(s)*0.3; }
-      else if (state==='attack1') { fA=-1.4; bA=0.7; fL=0.3; lean=0.3; }
-      else if (state==='attack2') { fL=-1.2; bL=-0.1; fA=-0.8; lean=0.2; }
-      else if (state==='attack3') { fA=-1.7+Math.sin(t*4)*0.3; lean=0.3; }
-      else if (state==='jump') { fL=-0.4; bL=0.4; fA=-0.9; kb=0.4; }
-      const sc='rgba(20,20,30,0.95)', hR=8, bH=22, lH=24, aL=16;
-      const shY=-bH-hR*2+2, hipY=-lH+2, bx=Math.sin(lean)*3;
-      ctx.strokeStyle=sc; ctx.fillStyle=sc; ctx.lineWidth=2.5; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.shadowBlur=6; ctx.shadowColor='rgba(0,0,0,0.4)';
-      ctx.globalAlpha=0.4;
-      ctx.beginPath(); ctx.moveTo(0,hipY); ctx.lineTo(Math.sin(bL)*lH*0.5, hipY+Math.cos(Math.abs(bL))*lH*0.5+kb*7); ctx.lineTo(Math.sin(bL)*lH*0.45+Math.sin(bL+kb)*lH*0.45, hipY+lH*0.5+kb*7); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0,shY); const baex=Math.sin(bA)*aL*0.5, baey=shY+Math.cos(Math.abs(bA))*aL*0.5; ctx.lineTo(baex,baey); ctx.lineTo(baex+Math.sin(bA*0.7)*aL*0.5, baey+aL*0.45); ctx.stroke();
+    const draw = (x:number,y:number,right:boolean,st:string,fr:number,hb:string,sc=1.0) => {
+      ctx.save(); ctx.translate(x,y); if(!right)ctx.scale(-1,1); ctx.scale(sc,sc);
+      const t=fr*0.2;
+      let fL=0.15,bL=-0.15,fA=-0.3,bA=0.35,lean=0,kb=0;
+      if(st==='run'){const s=Math.sin(t*3);fL=s*0.85;bL=-s*0.85;fA=-s*0.7;bA=s*0.7;lean=0.25;kb=Math.abs(s)*0.5;}
+      else if(st==='a1'){fA=-1.8;bA=0.9;fL=0.5;lean=0.4;}
+      else if(st==='a2'){fL=-1.6;fA=-0.9;lean=0.3;}
+      else if(st==='a3'){fA=-2.4+Math.sin(t*6)*0.7;lean=0.45;}
+      else if(st==='jump'){fL=-0.7;bL=0.7;fA=-1.2;bA=-0.6;kb=0.8;}
+      else if(st==='hurt'){lean=-0.5;fA=1.0;bA=0.8;}
+      const body='rgba(10,10,15,0.97)',hR=10,bH=26,lH=30,aL=20;
+      const shY=-bH-hR*2+3,hipY=-lH+3,bx=Math.sin(lean)*4;
+      ctx.strokeStyle=body;ctx.fillStyle=body;ctx.lineWidth=3.5;ctx.lineCap='round';ctx.lineJoin='round';ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=8;
+      ctx.globalAlpha=0.35;
+      ctx.beginPath();ctx.moveTo(0,hipY);const bkx=Math.sin(bL)*lH*0.5,bky=hipY+Math.cos(Math.abs(bL))*lH*0.5+kb*12;ctx.lineTo(bkx,bky);ctx.lineTo(bkx+Math.sin(bL+kb)*lH*0.45,bky+lH*0.5);ctx.stroke();
+      const baex=Math.sin(bA)*aL*0.5,baey=shY+Math.cos(Math.abs(bA))*aL*0.5;ctx.beginPath();ctx.moveTo(0,shY);ctx.lineTo(baex,baey);ctx.lineTo(baex+Math.sin(bA*0.7)*aL*0.5,baey+aL*0.45);ctx.stroke();
       ctx.globalAlpha=1;
-      ctx.beginPath(); ctx.moveTo(0,hipY); ctx.lineTo(bx,shY); ctx.stroke();
-      ctx.beginPath(); ctx.arc(bx,shY-hR,hR,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(bx,shY-hR,hR+1,Math.PI*0.75,Math.PI*0.25); ctx.strokeStyle=hb; ctx.lineWidth=2.5; ctx.shadowColor=hb; ctx.shadowBlur=10; ctx.stroke();
-      ctx.strokeStyle=sc; ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=6; ctx.lineWidth=2.5;
-      ctx.beginPath(); ctx.moveTo(0,hipY); const fkx=Math.sin(fL)*lH*0.5, fky=hipY+Math.cos(Math.abs(fL))*lH*0.5+kb*6; ctx.lineTo(fkx,fky); ctx.lineTo(fkx+Math.sin(fL+kb*0.5)*lH*0.45, fky+lH*0.5); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(bx,shY); const faex=bx+Math.sin(fA)*aL*0.5, faey=shY+Math.cos(Math.abs(fA))*aL*0.5; ctx.lineTo(faex,faey); const fahx=faex+Math.sin(fA*0.8)*aL*0.5, fahy=faey+aL*0.5; ctx.lineTo(fahx,fahy); ctx.stroke();
-      if (state.startsWith('attack')||state==='run') {
-        const sa=fA-0.3;
-        ctx.beginPath(); ctx.moveTo(fahx,fahy); ctx.lineTo(fahx+Math.sin(sa)*28, fahy-Math.cos(sa)*12);
-        ctx.strokeStyle=hb.replace('0.9','0.7'); ctx.shadowColor=hb; ctx.shadowBlur=14; ctx.lineWidth=1.5; ctx.stroke();
-        if(state==='attack1'||state==='attack3'){ctx.beginPath();ctx.moveTo(fahx,fahy);ctx.lineTo(fahx+Math.sin(sa+0.5)*22,fahy-Math.cos(sa+0.5)*9);ctx.strokeStyle=hb.replace('0.9','0.18');ctx.lineWidth=6;ctx.stroke();}
-      }
+      ctx.beginPath();ctx.moveTo(0,hipY);ctx.lineTo(bx,shY);ctx.stroke();
+      ctx.beginPath();ctx.arc(bx,shY-hR,hR,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(bx,shY-hR,hR+2,Math.PI*0.7,Math.PI*0.3);ctx.strokeStyle=hb;ctx.lineWidth=3;ctx.shadowColor=hb;ctx.shadowBlur=18;ctx.stroke();
+      ctx.strokeStyle=body;ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=8;ctx.lineWidth=3.5;
+      const fkx=Math.sin(fL)*lH*0.5,fky=hipY+Math.cos(Math.abs(fL))*lH*0.5+kb*10;ctx.beginPath();ctx.moveTo(0,hipY);ctx.lineTo(fkx,fky);ctx.lineTo(fkx+Math.sin(fL+kb*0.5)*lH*0.45,fky+lH*0.5);ctx.stroke();
+      const faex=bx+Math.sin(fA)*aL*0.5,faey=shY+Math.cos(Math.abs(fA))*aL*0.5,fahx=faex+Math.sin(fA*0.8)*aL*0.5,fahy=faey+aL*0.5;
+      ctx.beginPath();ctx.moveTo(bx,shY);ctx.lineTo(faex,faey);ctx.lineTo(fahx,fahy);ctx.stroke();
+      const sa=fA-0.2,sL=st.startsWith('a')?52:34;
+      ctx.beginPath();ctx.moveTo(fahx,fahy);ctx.lineTo(fahx+Math.sin(sa)*sL,fahy-Math.cos(sa)*sL*0.35);
+      ctx.strokeStyle=hb==='rgba(80,180,255,0.95)'?'rgba(150,220,255,0.9)':'rgba(255,255,255,0.4)';ctx.shadowColor=hb;ctx.shadowBlur=st.startsWith('a')?26:10;ctx.lineWidth=2;ctx.stroke();
+      if(st==='a1'||st==='a3'){for(let i=1;i<=4;i++){ctx.beginPath();ctx.moveTo(fahx,fahy);ctx.lineTo(fahx+Math.sin(sa+i*0.18)*sL*0.8,fahy-Math.cos(sa+i*0.18)*sL*0.3);ctx.strokeStyle=`rgba(255,255,255,${0.1/i})`;ctx.lineWidth=10-i*2;ctx.shadowBlur=0;ctx.stroke();}}
       ctx.restore();
-    }
+    };
 
-    type F = {x:number;y:number;vy:number;state:string;timer:number;frame:number;right:boolean;hb:string;};
-    const fs: F[] = [
-      {x:72, y:ground, vy:0, state:'idle', timer:60, frame:0, right:true, hb:'rgba(100,180,255,0.9)'},
-      {x:216, y:ground, vy:0, state:'idle', timer:80, frame:0, right:false, hb:'rgba(255,80,80,0.9)'}
+    type F={x:number;y:number;vy:number;st:string;t:number;fr:number;right:boolean;hb:string;kb:number;};
+    const hero:F={x:50,y:G,vy:0,st:'idle',t:30,fr:0,right:true,hb:'rgba(80,180,255,0.95)',kb:0};
+    const enemies:F[]=[
+      {x:220,y:G,vy:0,st:'idle',t:40,fr:0,right:false,hb:'rgba(255,255,255,0.3)',kb:0},
+      {x:260,y:G,vy:0,st:'idle',t:65,fr:0,right:false,hb:'rgba(255,255,255,0.2)',kb:0},
+      {x:180,y:G,vy:0,st:'idle',t:52,fr:0,right:false,hb:'rgba(255,255,255,0.15)',kb:0},
     ];
 
-    function update(f: F, o: F) {
-      f.frame++; f.timer--;
-      if (f.y < ground) { f.vy += 0.9; f.y += f.vy; if(f.y>=ground){f.y=ground;f.vy=0;if(f.state==='jump')f.state='idle';} }
-      if (f.timer > 0) return;
-      const dist = Math.abs(f.x-o.x); const r=Math.random();
-      if (dist < 90) {
-        if(r<0.4){f.state='attack1';f.timer=18;spawnP((f.x+o.x)/2,ground-42,f.hb);}
-        else if(r<0.7){f.state='attack2';f.timer=22;}
-        else{f.state='attack3';f.timer=24;spawnP((f.x+o.x)/2,ground-42,f.hb);}
-      } else if (dist<160) {
-        if(r<0.35){f.state='jump';f.timer=28;f.vy=-13;}
-        else{f.state='attack1';f.timer=18;}
+    const upd = (f:F, tx:number, isHero:boolean) => {
+      f.fr++; f.t--;
+      if(f.kb!==0){f.x+=f.kb;f.kb*=0.6;if(Math.abs(f.kb)<0.4)f.kb=0;}
+      if(f.y<G){f.vy+=1.3;f.y+=f.vy;if(f.y>=G){f.y=G;f.vy=0;if(f.st==='jump')f.st='idle';}}
+      // Respawn enemy if knocked far off
+      if(!isHero&&f.x<20){f.x=200+Math.random()*70;f.st='idle';f.t=30;}
+      if(f.t>0)return;
+      const dist=Math.abs(f.x-tx),r=Math.random();
+      if(isHero){
+        if(dist<75){
+          // ACTUALLY CLOSE — attack and knock them back
+          const atk=r<0.45?'a1':r<0.7?'a2':'a3'; f.st=atk; f.t=10+Math.floor(r*8);
+          enemies.forEach(e=>{if(Math.abs(e.x-f.x)<85){e.kb=30;e.st='hurt';e.t=12;boom((f.x+e.x)/2,G-60,'rgba(80,180,255,0.8)',10);}});
+        } else if(dist<160){
+          if(r<0.4){f.st='jump';f.t=22;f.vy=-18;}
+          else{f.st='a1';f.t=12;boom(f.x+55,G-55,'rgba(80,180,255,0.6)',6);}
+        } else {
+          f.st='run';f.t=8;f.x=Math.min(f.x+45,W-25);
+        }
       } else {
-        f.state='run'; f.timer=16;
-        f.x += f.right ? 20 : -20;
-        f.x = Math.max(30, Math.min(258, f.x));
+        if(f.st==='hurt'){f.st='idle';f.t=18;return;}
+        if(dist<90){
+          if(r<0.4){f.st='a1';f.t=14;}
+          else if(r<0.65){f.st='a2';f.t=16;}
+          else if(r<0.8){f.st='jump';f.t=20;f.vy=-15;}
+          else{f.st='idle';f.t=15;}
+        } else {
+          f.st='run';f.t=10;f.x=Math.max(f.x-40,tx+65);
+        }
       }
-    }
+      f.x=Math.max(15,Math.min(W-15,f.x));
+    };
 
-    let animId: number;
-    function loop() {
+    let animId:number;
+    const loop=()=>{
       ctx.clearRect(0,0,W,H);
-      // Subtle bg
-      ctx.fillStyle='rgba(8,8,12,0)'; ctx.fillRect(0,0,W,H);
-      // Ground line
-      ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.fillRect(0,ground+1,W,1);
-
-      fs.forEach((f,i) => update(f, fs[1-i]));
-
-      // Shadows
-      fs.forEach(f => {
-        ctx.save(); ctx.globalAlpha=0.2; ctx.fillStyle='rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(f.x,ground+2,18,4,0,0,Math.PI*2); ctx.fill(); ctx.restore();
-      });
-
-      drawF(fs[0].x,fs[0].y,true,fs[0].state,fs[0].frame,fs[0].hb);
-      drawF(fs[1].x,fs[1].y,false,fs[1].state,fs[1].frame,fs[1].hb);
-
-      for(let i=particles.length-1;i>=0;i--){
-        const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.life-=p.decay;
-        if(p.life<=0){particles.splice(i,1);continue;}
-        ctx.save(); ctx.globalAlpha=p.life; ctx.fillStyle=p.color; ctx.shadowColor=p.color; ctx.shadowBlur=5;
-        ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill(); ctx.restore();
-      }
-      animId = requestAnimationFrame(loop);
-    }
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, []);
-
-  return <canvas ref={canvasRef} width={288} height={120} className="w-full opacity-70" />;
+      ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fillRect(0,G+1,W,1);
+      const nearestEnemy=enemies.reduce((a,b)=>Math.abs(b.x-hero.x)<Math.abs(a.x-hero.x)?b:a);
+      upd(hero,nearestEnemy.x,true);
+      enemies.forEach(e=>upd(e,hero.x,false));
+      [hero,...enemies].forEach(f=>{ctx.save();ctx.globalAlpha=0.12;ctx.fillStyle='rgba(0,0,0,1)';ctx.beginPath();ctx.ellipse(f.x,G+3,22,5,0,0,Math.PI*2);ctx.fill();ctx.restore();});
+      enemies.forEach(e=>draw(e.x,e.y,e.right,e.st,e.fr,e.hb,0.82));
+      draw(hero.x,hero.y,hero.right,hero.st,hero.fr,hero.hb,1.0);
+      for(let i=pts.length-1;i>=0;i--){const p=pts[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.35;p.life-=p.decay;if(p.life<=0){pts.splice(i,1);continue;}ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.c;ctx.shadowColor=p.c;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2);ctx.fill();ctx.restore();}
+      animId=requestAnimationFrame(loop);
+    };
+    animId=requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(animId);
+  },[]);
+  return <canvas ref={canvasRef} width={288} height={180} className="w-full" style={{opacity:0.88}} />;
 };
+
 
 type SidebarProps = {
   activeTab: string;
@@ -227,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       </nav>
       <div className="p-6 border-t border-white/10 space-y-4">
         {/* Ninja fight animation */}
-        <div className="rounded-2xl overflow-hidden border border-white/5 bg-black/30">
+        <div className="rounded-2xl overflow-hidden border border-white/5">
           <SidebarNinja />
         </div>
         <div className="flex items-center space-x-3">

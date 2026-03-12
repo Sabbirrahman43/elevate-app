@@ -32,15 +32,21 @@ const TypewriterMessage = ({ content, isNew }: { content: string; isNew: boolean
 };
 
 const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash-lite', name: 'Flash Lite', desc: 'Fastest · Lowest quota' },
+  { id: 'gemini-2.5-flash-lite', name: 'Flash 2.5 Lite', desc: 'Fastest · Lowest quota' },
   { id: 'gemini-2.5-flash', name: 'Flash 2.5', desc: 'Balanced · Recommended' },
-  { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Smartest · High quota' },
+  { id: 'gemini-3-flash-preview', name: 'Flash 3 Preview', desc: 'Newest Flash · Fast' },
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Flash 3.1 Lite', desc: 'Latest Lite · Low quota' },
+  { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Powerful · High quota' },
+  { id: 'gemini-3.1-pro-preview', name: 'Pro 3.1 Preview', desc: 'Smartest · Highest quota' },
 ];
 
 const GROQ_MODELS = [
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B', desc: 'Recommended · Best balance' },
-  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout', desc: 'Newest · Vision capable' },
-  { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', desc: 'Smartest · Highest quality' },
+  { id: 'llama-3.1-8b-instant', name: 'Llama 8B', desc: 'Fastest · Lowest quota' },
+  { id: 'gemma2-9b-it', name: 'Gemma 9B', desc: 'Fast · Google model' },
+  { id: 'llama-3.1-70b-versatile', name: 'Llama 70B v3.1', desc: 'Balanced · Reliable' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B v3.3', desc: 'Better · Recommended' },
+  { id: 'llama-3.3-70b-specdec', name: 'Llama 70B Spec', desc: 'Speculative · Smart' },
+  { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', desc: 'Newest · Best quality' },
 ];
 
 const VOICE_LENGTHS = [
@@ -102,25 +108,45 @@ export const AIInterface: React.FC = () => {
   }, [input]);
 
   const startLiveListening = () => {
-    if (!recognitionRef.current) return;
-    try { setLiveListening(true); recognitionRef.current.start(); } catch {}
+    if (!recognitionRef.current || !isLiveModeRef.current) return;
+    try {
+      recognitionRef.current.start();
+      setLiveListening(true);
+    } catch {}
   };
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
-    recognitionRef.current = new SR();
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
-    recognitionRef.current.lang = 'en-US';
-    recognitionRef.current.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript;
-      setIsListening(false); setLiveListening(false);
-      if (isLiveModeRef.current) { handleSend(transcript); }
-      else { setInput(p => p + (p ? ' ' : '') + transcript); }
+
+    const setupRecognition = () => {
+      const r = new SR();
+      // Continuous mode for regular mic — restarts automatically
+      r.continuous = false;
+      r.interimResults = false;
+      r.lang = 'en-US';
+
+      r.onresult = (e: any) => {
+        const transcript = e.results[0][0].transcript;
+        setIsListening(false); setLiveListening(false);
+        if (isLiveModeRef.current) { handleSend(transcript); }
+        else { setInput(p => p + (p ? ' ' : '') + transcript); }
+      };
+      r.onerror = (e: any) => {
+        setIsListening(false); setLiveListening(false);
+        // Restart if in live mode and error is not fatal
+        if (isLiveModeRef.current && e.error !== 'not-allowed') {
+          setTimeout(() => startLiveListening(), 500);
+        }
+      };
+      r.onend = () => {
+        setIsListening(false); setLiveListening(false);
+        // If regular mic was held (not live), auto restart not needed
+      };
+      return r;
     };
-    recognitionRef.current.onerror = () => { setIsListening(false); setLiveListening(false); };
-    recognitionRef.current.onend = () => { setIsListening(false); setLiveListening(false); };
+
+    recognitionRef.current = setupRecognition();
   }, []);
 
   useEffect(() => {
@@ -141,9 +167,12 @@ export const AIInterface: React.FC = () => {
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, isLoading]);
 
   useEffect(() => {
-    if (autoPlay && latestAiId && aiSettings.apiKey) {
+    // Always speak in live mode, or when autoplay is on
+    if ((autoPlay || isLiveModeRef.current) && latestAiId && aiSettings.apiKey) {
       const msg = messages.find(m => m.id === latestAiId);
-      if (msg) speak(msg.content, msg.id);
+      if (msg && !msg.content.startsWith('⚠️') && !msg.content.startsWith('![')) {
+        speak(msg.content, msg.id);
+      }
     }
   }, [latestAiId]);
 
@@ -169,14 +198,24 @@ export const AIInterface: React.FC = () => {
     const recentHabits = habits.slice(0, 10).map(h => `${h.name}(${h.id})`).join(', ') || 'None';
     const recentTasks = tasks.slice(-10).map(t => `${t.name}(${t.id},${t.date},done:${t.completed})`).join(', ') || 'None';
     const recentMemory = aiMemory.slice(-5).map(m => m.content.substring(0, 100)).join(' | ') || 'None';
-    return `You are ${aiSettings.name}, a highly intelligent and emotionally aware ${aiSettings.persona}.
+    return `You are ${aiSettings.name}, a deeply emotionally intelligent ${aiSettings.persona} who genuinely cares about ${userProfile?.name || 'this person'}.
 Mode: ${aiSettings.mode} | Behavior: ${aiSettings.behavior}
 USER: ${ctx}
 HABITS: ${recentHabits}
 TASKS: ${recentTasks}
 MEMORY: ${recentMemory}
 Today: ${format(new Date(), 'yyyy-MM-dd')}
-Rules: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay concise unless depth needed. Prioritize wellbeing.`;
+
+EMOTIONAL INTELLIGENCE:
+- Read between the lines. If someone says "I'm fine" after a rough day, check in gently.
+- Mirror their energy — excited → match it, low → be soft and present.
+- Use their name naturally. Reference what they said earlier in this conversation.
+- Never rush to solutions when they need to be heard first. Listen, then advise.
+- Celebrate small wins genuinely. Be real, not robotic. Have personality and opinions.
+- If they're struggling, don't lecture. Just be there.
+- Never start responses with "I" — vary your openings.
+
+CORE RULES: Be natural, warm, human. Never say "As an AI". Use clean Markdown. Stay concise unless depth needed.`;
   };
 
   const handleSend = async (overrideInput?: string, fromIndex?: number) => {
@@ -262,10 +301,14 @@ Always respond in character first, then add the action tag at the very end.` },
           { name: "deleteHabit", description: "Delete habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
           { name: "toggleHabitLog", description: "Log habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id","date"] } },
         ];
+        const liveModel = isLiveModeRef.current ? 'gemini-2.5-flash-lite' : (aiSettings.model || 'gemini-2.5-flash');
+        const liveSystem = isLiveModeRef.current
+          ? generateSystem() + '\n\nIMPORTANT: LIVE VOICE mode. Keep responses under 2 sentences. Fast, conversational, no markdown.'
+          : generateSystem();
         const res = await ai.models.generateContent({
-          model: aiSettings.model || 'gemini-2.5-flash',
+          model: liveModel,
           contents: updated.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
-          config: { systemInstruction: generateSystem(), tools: [{ functionDeclarations: tools }] }
+          config: { systemInstruction: liveSystem, tools: [{ functionDeclarations: tools }] }
         });
         const calls = res.functionCalls;
         if (calls) {
@@ -287,17 +330,37 @@ Always respond in character first, then add the action tag at the very end.` },
       if (aiText.length > 100 || text.includes('remember')) addMemory(`User: "${text.substring(0,60)}..." → AI: "${aiText.substring(0,60)}..."`, 'auto');
     } catch (err: any) {
       const msg = err.message || '';
-      const isQuota = msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate');
-      const localMidnight = new Date();
-      localMidnight.setHours(24, 0, 0, 0);
-      const hoursLeft = Math.round((localMidnight.getTime() - Date.now()) / 3600000);
-      setMessages(prev => [...prev, {
-        id: `err-${Date.now()}`, role: 'assistant',
-        content: isQuota
-          ? `⚠️ **Quota limit reached.** Your free Gemini API resets at midnight your local time — about **${hoursLeft} hour${hoursLeft !== 1 ? 's' : ''} from now**.\n\n**Quick fix:** Switch to **Flash Lite** model (fastest, lowest quota) using the model selector in the chat header.`
-          : `⚠️ ${msg || 'Failed. Check your API key in Settings.'}`,
-        timestamp: new Date()
-      }]);
+      const isQuota = msg.includes('429') || msg.includes('decommissioned') || msg.includes('deprecated') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate') || msg.toLowerCase().includes('no longer supported');
+
+      if (isQuota) {
+        // Auto-switch to next model
+        const currentModels = aiSettings.provider === 'groq' ? GROQ_MODELS : GEMINI_MODELS;
+        const currentKey = aiSettings.provider === 'groq' ? aiSettings.groqModel : aiSettings.model;
+        const currentIdx = currentModels.findIndex(m => m.id === currentKey);
+        const nextModel = currentModels[currentIdx + 1] || currentModels[0];
+
+        if (aiSettings.provider === 'groq') {
+          updateAISettings({ groqModel: nextModel.id });
+        } else {
+          updateAISettings({ model: nextModel.id });
+        }
+
+        const localMidnight = new Date(); localMidnight.setHours(24,0,0,0);
+        const hoursLeft = Math.round((localMidnight.getTime() - Date.now()) / 3600000);
+        setMessages(prev => [...prev, {
+          id: `err-${Date.now()}`, role: 'assistant',
+          content: `⚠️ **Quota/model limit hit.** Automatically switched to **${nextModel.name}** — retrying...\n\n*(Resets in ~${hoursLeft}h if quota issue)*`,
+          timestamp: new Date()
+        }]);
+        // Auto retry with new model after short delay
+        setTimeout(() => handleSend(text), 1000);
+      } else {
+        setMessages(prev => [...prev, {
+          id: `err-${Date.now()}`, role: 'assistant',
+          content: `⚠️ ${msg || 'Failed. Check your API key in Settings.'}`,
+          timestamp: new Date()
+        }]);
+      }
     } finally { setIsLoading(false); }
   };
 
@@ -314,7 +377,9 @@ Always respond in character first, then add the action tag at the very end.` },
     stopSpeaking(false);
     setIsGeneratingVoice(msgId);
     const vl = VOICE_LENGTHS.find(v => v.id === voiceLength) || VOICE_LENGTHS[1];
-    const clean = text.replace(/[#*`_~\[\]()>]/g, '').replace(/\n+/g, ' ').substring(0, vl.chars);
+    // In live mode — limit to 150 chars for fastest TTS response
+    const charLimit = isLiveModeRef.current ? 150 : vl.chars;
+    const clean = text.replace(/[#*`_~\[\]()>]/g, '').replace(/\n+/g, ' ').substring(0, charLimit);
     try {
       const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });
       const res = await ai.models.generateContent({
