@@ -32,22 +32,23 @@ const TypewriterMessage = ({ content, isNew }: { content: string; isNew: boolean
 };
 
 const GEMINI_MODELS = [
+  { id: 'auto', name: '⚡ Auto', desc: 'Auto-switches when limit hit' },
   { id: 'gemini-2.5-flash-lite', name: 'Flash 2.5 Lite', desc: 'Fastest · Lowest quota' },
   { id: 'gemini-2.5-flash', name: 'Flash 2.5', desc: 'Balanced · Recommended' },
-  { id: 'gemini-3-flash-preview', name: 'Flash 3 Preview', desc: 'Newest Flash · Fast' },
-  { id: 'gemini-3.1-flash-lite-preview', name: 'Flash 3.1 Lite', desc: 'Latest Lite · Low quota' },
-  { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Powerful · High quota' },
-  { id: 'gemini-3.1-pro-preview', name: 'Pro 3.1 Preview', desc: 'Smartest · Highest quota' },
+  { id: 'gemini-3-flash-preview', name: 'Flash 3 Preview', desc: 'Newest Flash' },
+  { id: 'gemini-3.1-flash-lite-preview', name: 'Flash 3.1 Lite', desc: 'Latest lite' },
+  { id: 'gemini-2.5-pro-preview-03-25', name: 'Pro 2.5', desc: 'Powerful' },
+  { id: 'gemini-3.1-pro-preview', name: 'Pro 3.1 Preview', desc: 'Smartest' },
 ];
 
 const GROQ_MODELS = [
-  { id: 'llama-3.1-8b-instant', name: 'Llama 8B', desc: 'Fastest · Lowest quota' },
-  { id: 'gemma2-9b-it', name: 'Gemma 9B', desc: 'Fast · Google model' },
-  { id: 'llama-3.1-70b-versatile', name: 'Llama 70B v3.1', desc: 'Balanced · Reliable' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B v3.3', desc: 'Better · Recommended' },
-  { id: 'llama-3.3-70b-specdec', name: 'Llama 70B Spec', desc: 'Speculative · Smart' },
+  { id: 'auto', name: '⚡ Auto', desc: 'Auto-switches when limit hit' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 70B', desc: 'Recommended · Best balance' },
   { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', name: 'Llama 4 Maverick', desc: 'Newest · Best quality' },
 ];
+
+const ALL_GEMINI_IDS = GEMINI_MODELS.filter(m => m.id !== 'auto').map(m => m.id);
+const ALL_GROQ_IDS = GROQ_MODELS.filter(m => m.id !== 'auto').map(m => m.id);
 
 const VOICE_LENGTHS = [
   { id: 'short', label: 'Short', desc: '~40 words', chars: 200 },
@@ -150,12 +151,13 @@ export const AIInterface: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Only load once on mount — don't re-run when settings change
     if (chatHistory.length > 0) {
       setMessages(chatHistory.map(m => ({ ...m, timestamp: new Date(m.timestamp) })));
     } else {
-      setMessages([{ id: 'welcome', role: 'assistant', content: `Hello! I'm **${aiSettings.name}**, your **${aiSettings.persona}**.\n\n- Go to **Settings** → add your **Gemini API Key** (free at aistudio.google.com)\n- Fill in your Profile so I know your goals\n- Ask me to add habits or tasks here\n- Use 🎙️ for voice, or the call button for live mode\n\nHow can I help?`, timestamp: new Date() }]);
+      setMessages([{ id: 'welcome', role: 'assistant', content: `Hello! I'm **${aiSettings.name}**, your **${aiSettings.persona}**.\n\n- Add your API Key in **Settings** to start chatting\n- Fill in your Profile so I know your goals\n- Ask me to add habits or tasks\n- Use 🎙️ for voice, 📞 for live call\n\nHow can I help?`, timestamp: new Date() }]);
     }
-  }, [aiSettings.name, aiSettings.persona]);
+  }, []); // Empty deps — only run once!
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -249,7 +251,7 @@ CORE RULES: Be natural, warm, human. Never say "As an AI". Use clean Markdown. S
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiSettings.groqApiKey}` },
           body: JSON.stringify({
-            model: aiSettings.groqModel || 'llama-3.3-70b-versatile',
+            model: aiSettings.groqModel === 'auto' ? ALL_GROQ_IDS[0] : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
             messages: [
               { role: 'system', content: generateSystem() + `
 
@@ -301,9 +303,9 @@ Always respond in character first, then add the action tag at the very end.` },
           { name: "deleteHabit", description: "Delete habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING } }, required: ["id"] } },
           { name: "toggleHabitLog", description: "Log habit", parameters: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, date: { type: Type.STRING } }, required: ["id","date"] } },
         ];
-        const liveModel = isLiveModeRef.current ? 'gemini-2.5-flash-lite' : (aiSettings.model || 'gemini-2.5-flash');
+        const liveModel = isLiveModeRef.current ? 'gemini-2.5-flash-lite' : (aiSettings.model === 'auto' ? ALL_GEMINI_IDS[0] : (aiSettings.model || 'gemini-2.5-flash'));
         const liveSystem = isLiveModeRef.current
-          ? generateSystem() + '\n\nIMPORTANT: LIVE VOICE mode. Keep responses under 2 sentences. Fast, conversational, no markdown.'
+          ? generateSystem() + '\n\nIMPORTANT: LIVE VOICE conversation. Respond naturally like a real person talking. 2-4 sentences max. No markdown, no bullet points, just natural speech.'
           : generateSystem();
         const res = await ai.models.generateContent({
           model: liveModel,
@@ -333,27 +335,39 @@ Always respond in character first, then add the action tag at the very end.` },
       const isQuota = msg.includes('429') || msg.includes('decommissioned') || msg.includes('deprecated') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate') || msg.toLowerCase().includes('no longer supported');
 
       if (isQuota) {
-        // Auto-switch to next model
-        const currentModels = aiSettings.provider === 'groq' ? GROQ_MODELS : GEMINI_MODELS;
-        const currentKey = aiSettings.provider === 'groq' ? aiSettings.groqModel : aiSettings.model;
-        const currentIdx = currentModels.findIndex(m => m.id === currentKey);
-        const nextModel = currentModels[currentIdx + 1] || currentModels[0];
+        const isAutoMode = aiSettings.provider === 'groq'
+          ? aiSettings.groqModel === 'auto'
+          : aiSettings.model === 'auto';
 
-        if (aiSettings.provider === 'groq') {
-          updateAISettings({ groqModel: nextModel.id });
+        // Build full fallback chain: current provider models first, then other provider
+        const allIds = aiSettings.provider === 'groq'
+          ? [...ALL_GROQ_IDS, ...ALL_GEMINI_IDS]
+          : [...ALL_GEMINI_IDS, ...ALL_GROQ_IDS];
+
+        const currentKey = aiSettings.provider === 'groq'
+          ? (aiSettings.groqModel === 'auto' ? ALL_GROQ_IDS[0] : aiSettings.groqModel)
+          : (aiSettings.model === 'auto' ? ALL_GEMINI_IDS[0] : aiSettings.model);
+
+        const currentIdx = allIds.indexOf(currentKey);
+        const nextId = allIds[currentIdx + 1] || allIds[0];
+        const switchToGroq = ALL_GROQ_IDS.includes(nextId);
+
+        const nextName = [...GEMINI_MODELS, ...GROQ_MODELS].find(m => m.id === nextId)?.name || nextId;
+
+        if (switchToGroq) {
+          updateAISettings({ provider: 'groq', groqModel: nextId });
         } else {
-          updateAISettings({ model: nextModel.id });
+          updateAISettings({ provider: 'gemini', model: nextId });
         }
 
         const localMidnight = new Date(); localMidnight.setHours(24,0,0,0);
         const hoursLeft = Math.round((localMidnight.getTime() - Date.now()) / 3600000);
         setMessages(prev => [...prev, {
           id: `err-${Date.now()}`, role: 'assistant',
-          content: `⚠️ **Quota/model limit hit.** Automatically switched to **${nextModel.name}** — retrying...\n\n*(Resets in ~${hoursLeft}h if quota issue)*`,
+          content: `⚡ Limit hit. Auto-switched to **${nextName}** — retrying...\n*(Quota resets in ~${hoursLeft}h)*`,
           timestamp: new Date()
         }]);
-        // Auto retry with new model after short delay
-        setTimeout(() => handleSend(text), 1000);
+        setTimeout(() => handleSend(text), 800);
       } else {
         setMessages(prev => [...prev, {
           id: `err-${Date.now()}`, role: 'assistant',
@@ -378,7 +392,7 @@ Always respond in character first, then add the action tag at the very end.` },
     setIsGeneratingVoice(msgId);
     const vl = VOICE_LENGTHS.find(v => v.id === voiceLength) || VOICE_LENGTHS[1];
     // In live mode — limit to 150 chars for fastest TTS response
-    const charLimit = isLiveModeRef.current ? 150 : vl.chars;
+    const charLimit = isLiveModeRef.current ? 400 : vl.chars;
     const clean = text.replace(/[#*`_~\[\]()>]/g, '').replace(/\n+/g, ' ').substring(0, charLimit);
     try {
       const ai = new GoogleGenAI({ apiKey: aiSettings.apiKey });

@@ -358,45 +358,14 @@ export const Settings: React.FC = () => {
             </div>
           </section>
 
-          {/* Model & Voice */}
+          {/* Voice */}
           <section className="bg-white dark:bg-[#141414] p-6 md:p-8 rounded-3xl shadow-sm border border-black/5 dark:border-white/5 transition-colors">
             <div className="flex items-center space-x-3 mb-6">
               <Cpu className="text-emerald-500" size={24} />
-              <h3 className="text-xl font-bold">Model & Voice</h3>
+              <h3 className="text-xl font-bold">Voice Profile</h3>
             </div>
+            <p className="text-xs text-gray-400 mb-4">Switch models anytime from the AI chat header (model name below AI avatar).</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">Gemini Model</label>
-                <div className="space-y-3">
-                  {models.map(model => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        updateAISettings({ model: model.id });
-                      }}
-                      className={cn(
-                        "w-full p-4 rounded-2xl border text-left transition-all relative overflow-hidden",
-                        aiSettings.model === model.id 
-                          ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500 shadow-sm" 
-                          : "bg-white dark:bg-white/5 border-gray-100 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/30"
-                      )}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-gray-800 dark:text-gray-200 text-sm">{model.name}</span>
-                        </div>
-                        <span className={cn(
-                          "text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full",
-                          model.speed === 'Fastest' ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600" : "bg-blue-100 dark:bg-blue-500/20 text-blue-600"
-                        )}>
-                          {model.speed}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">{model.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">Voice Profile</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -416,7 +385,6 @@ export const Settings: React.FC = () => {
                     </button>
                   ))}
                 </div>
-              </div>
             </div>
           </section>
 
