@@ -9,6 +9,11 @@ export const Settings: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(!aiSettings.apiKey);
+  const [showGroqKey, setShowGroqKey] = useState(!aiSettings.groqApiKey);
+  const [showBehavior, setShowBehavior] = useState(!aiSettings.behavior);
+  const [showAbout, setShowAbout] = useState(!userProfile?.about);
+  const [showGoals, setShowGoals] = useState(!userProfile?.goals);
 
   const handleForceSave = async () => {
     setIsSaving(true);
@@ -101,7 +106,6 @@ export const Settings: React.FC = () => {
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Settings</h2>
           <p className="text-gray-500 dark:text-gray-400 font-medium mt-1">Customize your Elevate experience and AI agent.</p>
         </header>
-
         <div className="space-y-6 md:space-y-8">
           {/* API Configuration */}
           <section className="bg-white dark:bg-[#141414] p-6 md:p-8 rounded-3xl shadow-sm border border-black/5 dark:border-white/5 transition-colors">
@@ -111,18 +115,40 @@ export const Settings: React.FC = () => {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Gemini API Key</label>
-                <input type="password" value={aiSettings.apiKey || ''} onChange={(e) => updateAISettings({ apiKey: e.target.value })}
-                  placeholder="Enter your Google Gemini API Key"
-                  className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
-                <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">aistudio.google.com</span></p>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Gemini API Key</label>
+                  {aiSettings.apiKey && <button onClick={() => setShowGeminiKey(!showGeminiKey)} className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">{showGeminiKey ? 'Hide' : '✓ Set · Change'}</button>}
+                </div>
+                {showGeminiKey ? (
+                  <>
+                    <input type="password" value={aiSettings.apiKey || ''} onChange={(e) => updateAISettings({ apiKey: e.target.value })} onBlur={() => { if(aiSettings.apiKey) setShowGeminiKey(false); }}
+                      placeholder="Enter your Google Gemini API Key" autoFocus
+                      className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
+                    <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">aistudio.google.com</span></p>
+                  </>
+                ) : (
+                  <div className="h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl flex items-center gap-2">
+                    <span className="font-mono text-sm text-gray-400">{'•'.repeat(20)} set</span>
+                  </div>
+                )}
               </div>
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Groq API Key ⚡</label>
-                <input type="password" value={aiSettings.groqApiKey || ''} onChange={(e) => updateAISettings({ groqApiKey: e.target.value })}
-                  placeholder="Enter your Groq API Key"
-                  className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
-                <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">console.groq.com</span> — faster responses, free tier</p>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Groq API Key ⚡</label>
+                  {aiSettings.groqApiKey && <button onClick={() => setShowGroqKey(!showGroqKey)} className="text-[9px] font-bold uppercase tracking-widest text-emerald-500">{showGroqKey ? 'Hide' : '✓ Set · Change'}</button>}
+                </div>
+                {showGroqKey ? (
+                  <>
+                    <input type="password" value={aiSettings.groqApiKey || ''} onChange={(e) => updateAISettings({ groqApiKey: e.target.value })} onBlur={() => { if(aiSettings.groqApiKey) setShowGroqKey(false); }}
+                      placeholder="Enter your Groq API Key"
+                      className="w-full h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-sm transition-all" />
+                    <p className="mt-1 text-[10px] text-gray-400">Get free key at <span className="text-emerald-500">console.groq.com</span></p>
+                  </>
+                ) : (
+                  <div className="h-12 px-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl flex items-center gap-2">
+                    <span className="font-mono text-sm text-gray-400">{'•'.repeat(20)} set</span>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -503,8 +529,8 @@ export const Settings: React.FC = () => {
             </div>
           </section>
         </div>
-        </div>
       </div>
     </div>
+  </div>
   );
 };
