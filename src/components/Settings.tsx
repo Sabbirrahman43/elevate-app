@@ -365,26 +365,25 @@ export const Settings: React.FC = () => {
               <h3 className="text-xl font-bold">Voice Profile</h3>
             </div>
             <p className="text-xs text-gray-400 mb-4">Switch models anytime from the AI chat header (model name below AI avatar).</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">Voice Profile</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {voices.map(voice => (
-                    <button
-                      key={voice}
-                      onClick={() => updateAISettings({ voice })}
-                      className={cn(
-                        "p-4 rounded-2xl border flex flex-col items-center space-y-2 transition-all",
-                        aiSettings.voice === voice 
-                          ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500 shadow-sm" 
-                          : "bg-white dark:bg-white/5 border-gray-100 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/30"
-                      )}
-                    >
-                      <Volume2 size={24} className={aiSettings.voice === voice ? "text-emerald-500" : "text-gray-400"} />
-                      <span className="font-bold text-xs">{voice}</span>
-                    </button>
-                  ))}
-                </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-4">Voice Profile</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {voices.map(voice => (
+                  <button
+                    key={voice}
+                    onClick={() => updateAISettings({ voice })}
+                    className={cn(
+                      "p-4 rounded-2xl border flex flex-col items-center space-y-2 transition-all",
+                      aiSettings.voice === voice 
+                        ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500 shadow-sm" 
+                        : "bg-white dark:bg-white/5 border-gray-100 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/30"
+                    )}
+                  >
+                    <Volume2 size={24} className={aiSettings.voice === voice ? "text-emerald-500" : "text-gray-400"} />
+                    <span className="font-bold text-xs">{voice}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -503,6 +502,7 @@ export const Settings: React.FC = () => {
               </button>
             </div>
           </section>
+        </div>
         </div>
       </div>
     </div>
